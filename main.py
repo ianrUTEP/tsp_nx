@@ -1,6 +1,7 @@
 
 import argparse
 import jointlab as jl
+import json
 import importlib #for use in interactive
 
 if __name__ == "__main__":
@@ -16,8 +17,16 @@ if __name__ == "__main__":
   solve_graphs = args.solve
   make_complete_graph = args.complete_graph
   
-  graph_list = jl.reset_graph_list(json_filepath, make_complete_graph)
+  with open('html_settings.json') as settings_file:
+    html_set = json.load(settings_file)
   
+  graph_list = jl.reset_graph_list(json_filepath, make_complete_graph)
+
+  if solve_graphs:
+    solution_list = jl.solve_graphs_greedy(graph_list)
+    jl.save_solutions(solution_list, solution_filepath)
+    
+    
     # positions = [graph.nodes.data('pos') for graph in graph_list]
   # weights = [graph.edges.data('weight') for graph in graph_list]
   # plt.figure(figsize=(8,6))
@@ -26,10 +35,6 @@ if __name__ == "__main__":
   #   nx.draw_networkx_edge_labels()
   #   nx.draw_networkx_labels()
   # make_graph_html(graph_list, 750)
-  
-  if solve_graphs:
-    solution_list = jl.solve_graphs_greedy(graph_list)
-    jl.save_solutions(solution_list, solution_filepath)
   
   # nx.approximation.asadpour_atsp(graph_list[0])
   # nx.approximation.christofides(graph_list[0])
