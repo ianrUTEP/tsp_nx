@@ -15,12 +15,11 @@ def reset_graph_list(json_filepath, make_complete_graph):
 
 def load_graphs_json(file_path: str, graph_list: list, autocomplete: bool) -> list:
   with open(file_path) as json_file:
-    graphset = json.load(json_file)
     # turn into dataframe
-    df = pd.DataFrame(graphset)
+    df = pd.read_json(json_file)
     for row in df.itertuples(index=False):
       # each row in dataframe represents a graph, turn into graph object
-      graph_list.append(graph_from_row(row, autocomplete))
+      graph_list.append(graph_from_row_new(row, autocomplete))
   return graph_list
 
 def graph_from_row(row: tuple, autocomplete: bool) -> nx.Graph:
@@ -39,6 +38,20 @@ def graph_from_row(row: tuple, autocomplete: bool) -> nx.Graph:
     non_edge_value = 2 * getattr(row, 'MaxEWeight')
     G = complete_the_graph(G, non_edge_value)
   return G
+
+def graph_from_row_new(row: tuple, autocomplete: bool = False) -> nx.Graph:
+  G = nx.Graph()
+  for node_id, node_data in getattr(row, 'nodes').items():
+    G.add_node(int(node_id), pos=(node_data['pos'][0], node_data['pos'][1]), group=node_data['streamline'][0]) # streamline number becomes group
+  for edge_str, edge_data,  in getattr(row, 'edges').items():
+    u_str, v_str = edge_str.split(',')
+    G.add_edge(int(u_str), int(v_str), length=edge_data['len'], alignment=edge_data['align']) #no weight given yet
+  if autocomplete:
+    #make the graph complete for the asadpour method, giving a default maximum weight as 2x max
+    non_edge_value = 2 * getattr(row, 'MaxEWeight')
+    G = complete_the_graph(G, non_edge_value)
+  return G
+  
 
 def complete_the_graph(original_graph: nx.Graph, non_edge_weight: int) -> nx.Graph:
   """

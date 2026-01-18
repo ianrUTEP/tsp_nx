@@ -1,9 +1,11 @@
-networkx
-pandas
-scipy
+networkx #graphs
+pandas #arrays
+scipy #math
 lxml  #secure xml reader
 pyvis #HMTL visualizer with Network class
 seaborn #color palettes
+matplotlib #interactive plotting tool, used for colors
+dill  #session/data dump and load
 
 #temporary
 ipywidgets #for using notebook and testing
@@ -11,5 +13,4 @@ ipywidgets #for using notebook and testing
 #removed
 # graphviz #not sure if needed....
 #pydot #for direct export to files with g = nx.(drawing).nx_pydot.to_pydot(graph); g.write_png('output.png');
-# matplotlib #interactive plotting tool
 # iplotx #for extended support of matplotlib, offering more details
