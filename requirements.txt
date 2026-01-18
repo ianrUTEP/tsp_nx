@@ -6,6 +6,7 @@ pyvis #HMTL visualizer with Network class
 seaborn #color palettes
 matplotlib #interactive plotting tool, used for colors
 dill  #session/data dump and load
+pygad #genetic algorithm framework
 
 #temporary
 ipywidgets #for using notebook and testing

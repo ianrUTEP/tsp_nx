@@ -220,6 +220,22 @@ def solve_graphs_greedy(graph_list):
     solution_list.append(sol)
   return solution_list
 
+def solve_graphs_multgreedy(graph_list, n_greedys:int = 10):
+  solution_list = []
+  print("Beginning search for solutions")
+  for i, graph in enumerate(graph_list):
+    graph_sols = []
+    print("Solving graph", i)
+    sources = np.insert(np.random.randint(1, nx.number_of_nodes(graph) + 1, n_greedys-1), 0, 1) #plus one to limit to include, generate n-1 and add 1 as guaranteed source
+    for j, source in enumerate(sources):
+      print("iteration", j)
+      graph_sols.append(nx.approximation.greedy_tsp(graph, source=int(source)))
+    solution_list.append(graph_sols)
+  return solution_list
+
+def cycle_sol_to_path(sol_list:list):
+  return [[cycle[:-1] for cycle in graph] for graph in sol_list]
+
 def save_solutions(solution_list, solution_filepath):
   print("Saving solution sets")
   sol_array = np.array(solution_list, dtype=np.uint16)
