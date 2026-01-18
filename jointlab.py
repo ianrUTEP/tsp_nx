@@ -7,6 +7,7 @@ import random
 from datetime import datetime
 import seaborn as sns
 import matplotlib.colors as mcolors
+import pygad
 
 """
 functions to change/remove when not needed anymore (soon)
@@ -263,3 +264,48 @@ def get_attribute_extremes(graph: nx.Graph, attribute: str):
 
 def get_color_hex_in_range(value, colormap: mcolors.ListedColormap, normalizer: mcolors.Normalize):
   return mcolors.to_hex(colormap(normalizer(value)))
+
+#This section constructs some prebuilt GA functions
+#
+#
+def path_fitness(ga_instance: pygad.GA, solution, solution_idx, graph:nx.Graph) -> float:
+  return (2.0 * len(solution)) / nx.path_weight(graph, solution, 'weight')
+
+def manual_gen_stop(ga_instance: pygad.GA):
+  """
+  If the best solution fitness is above 1 (meaning no travel moves are selected or enough really good moves are selected), it stops the GA
+  
+  :param ga_instance: Description
+  :type ga_instance: pygad.GA
+  """
+  if ga_instance.best_solution()[1] >= 1.0:
+    return "stop"
+
+def empty_on_gen(ga_instance: pygad.GA):
+  return  
+  
+def make_ga(init_pop:list, gene_space:list, 
+            n_gens: int=50, n_par_mate: int=4, 
+            parent_keep: int=1, n_elites: int=2, #if n_elites != 0, then parent_keep is ignored in GA
+            fit_func = path_fitness,
+            mut:str='inversion', mut_prob:float=0.4, 
+            cross:str='two_points', cross_prob:float=0.2,
+            on_gen=manual_gen_stop) -> pygad.GA:
+  if on_gen is None:
+    on_gen = empty_on_gen
+  
+  return pygad.GA(num_generations=n_gens,
+                  num_parents_mating=n_par_mate,
+                  fitness_func=fit_func,
+                  crossover_type=cross, #pylance issue, this works
+                  crossover_probability=cross_prob,
+                  mutation_type=mut,
+                  mutation_probability=mut_prob,
+                  allow_duplicate_genes=False, #non-default, set and forget
+                  gene_space=gene_space,
+                  initial_population=init_pop,
+                  keep_parents=parent_keep,
+                  parent_selection_type='sss', #default, set and forget
+                  keep_elitism=n_elites,
+                  gene_type=int   #default, set and forget
+                  )
