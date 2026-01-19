@@ -92,10 +92,9 @@ def solve_graphs_multgreedy(graph_list, n_greedys:int = 10):
   print("Beginning search for solutions")
   for i, graph in enumerate(graph_list):
     graph_sols = []
-    print("Solving graph", i)
     sources = np.insert(np.random.randint(1, nx.number_of_nodes(graph) + 1, n_greedys-1), 0, 1) #plus one to limit to include, generate n-1 and add 1 as guaranteed source
     for j, source in enumerate(sources):
-      print("iteration", j)
+      print("graph", i, "sol", j)
       graph_sols.append(nx.approximation.greedy_tsp(graph, source=int(source)))
     solution_list.append(graph_sols)
   return solution_list
@@ -158,16 +157,99 @@ class GraphGA:
   
   def run_ga(self):
     self.ga.run()
-    
+  
+  def order_crossover(self, parents, offspring_size, ga_instance):
+    offspring = []
+
+    num_genes = offspring_size[1]
+    idx = 0
+
+    while len(offspring) < offspring_size[0]:
+        parent1 = parents[idx % parents.shape[0]]
+        parent2 = parents[(idx + 1) % parents.shape[0]]
+        idx += 1
+
+        # Choose cut points
+        c1, c2 = sorted(np.random.choice(range(num_genes), 2, replace=False))
+
+        child = [-1] * num_genes
+
+        # Copy slice from parent1
+        child[c1:c2] = parent1[c1:c2]
+
+        # Fill remaining genes from parent2
+        p2_idx = 0
+        for i in range(num_genes):
+            if child[i] == -1:
+                while parent2[p2_idx] in child:
+                    p2_idx += 1
+                child[i] = parent2[p2_idx]
+                p2_idx += 1
+
+        offspring.append(child)
+
+    return np.array(offspring)
+  
+  def fast_edge_recombination_crossover(self, parents, offspring_size, ga_instance):
+    offspring = []
+    num_genes = offspring_size[1]
+
+    while len(offspring) < offspring_size[0]:
+        p1, p2 = random.sample(list(parents), 2)
+
+        # Build adjacency lists
+        edge_map = {gene: set() for gene in p1}
+        for p in (p1, p2):
+            for i in range(num_genes):
+                if i > 0:
+                    edge_map[p[i]].add(p[i - 1])
+                if i < num_genes - 1:
+                    edge_map[p[i]].add(p[i + 1])
+
+        unused = set(p1)
+
+        current = random.choice(p1)
+        child = [current]
+        unused.remove(current)
+
+        while unused:
+            neighbors = edge_map[current] & unused
+
+            if neighbors:
+                # Choose neighbor with smallest adjacency list
+                next_node = min(neighbors, key=lambda x: len(edge_map[x]))
+            else:
+                next_node = random.choice(tuple(unused))
+
+            child.append(next_node)
+            unused.remove(next_node)
+
+            # Remove chosen node from its neighbors only
+            for n in edge_map[next_node]:
+                edge_map[n].discard(next_node)
+
+            current = next_node
+
+        offspring.append(child)
+
+    return np.array(offspring)
+  
   def reset_ga(self, n_gens: int=5, n_par_mate: int=120, 
               parent_keep: int=0, n_elites: int=2, #if n_elites != 0, then parent_keep is ignored in GA
               mut:str='inversion', mut_prob:float=0.4, 
-              cross:str='two_points', cross_prob:float=0.2, 
+              cross_prob:float=0.2, #doesn't really matter with custom crossovers
+              cross_type:str='edge_recomb',
               parent_choice:str='tournament', tour_k:int = 3):
-  
+
+    if cross_type == 'edge_recomb':
+      crossover = self.fast_edge_recombination_crossover
+    elif cross_type == 'order':
+      crossover = self.order_crossover
+    else:
+      crossover = 'single_point'
+
     self.ga = pygad.GA(num_generations=n_gens,
                       num_parents_mating=n_par_mate,
-                      crossover_type=cross,
                       crossover_probability=cross_prob,
                       parent_selection_type=parent_choice,
                       K_tournament=tour_k,
@@ -176,6 +258,7 @@ class GraphGA:
                       keep_parents=parent_keep,
                       keep_elitism=n_elites,
                       #class values
+                      crossover_type=crossover, #type: ignore #locked from the class
                       fitness_func=self.path_fitness, #locked from the class
                       gene_space=list(self.gene_range), #locked from the class
                       initial_population=self.path_list,  #locked from the class
@@ -197,25 +280,28 @@ class GraphGA:
     print(f"Parameters of the best solution : {solution}")
     print(f"Fitness value of the best solution = {solution_fitness}")
     print(f"Index of the best solution : {solution_idx}")
+    print(f"Weight of the solution = {nx.path_weight(self.graph, solution, 'weight')}")
     return self.ga.best_solution()
 
   def on_start(self, ga_instance):
       print("Starting GA search")
 
   def on_fitness(self, ga_instance, population_fitness):
-      print("Computing fitness")
+      print("Computed fitness")
 
   def on_parents(self, ga_instance, selected_parents):
-      print("Selecting parents")
+      print("Selected parents")
 
   def on_crossover(self, ga_instance, offspring_crossover):
-      print("Performing crossovers")
+      print("Performed crossovers")
 
   def on_mutation(self, ga_instance, offspring_mutation):
-      print("Mutating")
+      print("Mutated")
 
   def on_stop(self, ga_instance, last_population_fitness):
       print("Ending GA search")
       
   def on_generation(self, ga_instance):
-      print("Generation: ", ga_instance.generations_completed)
+      print("Generation:", ga_instance.generations_completed)
+      print("Fitness of best:", ga_instance.best_solution()[1])
+      
