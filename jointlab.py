@@ -100,8 +100,24 @@ def solve_graphs_multgreedy(graph_list, n_greedys:int = 10):
     solution_list.append(graph_sols)
   return solution_list
 
-def cycle_sol_to_path(sol_list:list):
+def cycle_sol_to_path_simple(sol_list:list):
   return [[cycle[:-1] if cycle else cycle for cycle in graph] for graph in sol_list]
+
+def cycle_to_path(sol_list:list, graph_list:list)->list:
+  all_path_sols = []
+  for i, solutions in enumerate(sol_list):
+    graph_path_sols = []
+    graph:nx.Graph = graph_list[i]
+    for cycle in solutions: #for each given cycle, identify the largest edge position by weight value
+      largest_edge_pos = 0
+      largest_edge_val = 0
+      for j in range(len(cycle) - 1):
+        if graph[cycle[j]][cycle[j+1]]['weight'] > largest_edge_val:
+          largest_edge_pos = j
+          largest_edge_val = graph[cycle[j]][cycle[j+1]]['weight']
+      graph_path_sols.append(cycle[largest_edge_pos+1:-1] + cycle[:largest_edge_pos+1]) #everything that comes after the bad edge, not including the last (duplicated) node from the cycle + everything that comes before the bad edge
+    all_path_sols.append(graph_path_sols)
+  return all_path_sols
 
 def save_solutions(solution_list, solution_filepath):
   print("Saving solution sets")
