@@ -119,7 +119,7 @@ def cycle_to_path(sol_list:list, graph_list:list)->list:
     all_path_sols.append(graph_path_sols)
   return all_path_sols
 
-def save_solutions(solution_list, solution_filepath):
+def save_solutions(solution_list:list, solution_filepath:str):
   print("Saving solution sets")
   sol_array = np.array(solution_list, dtype=np.uint16)
   np.savetxt(solution_filepath,sol_array.transpose(),delimiter=',',fmt='%i')
