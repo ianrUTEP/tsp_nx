@@ -268,8 +268,6 @@ def get_color_hex_in_range(value, colormap: mcolors.ListedColormap, normalizer: 
 #This section constructs some prebuilt GA functions
 #
 #
-def path_fitness(ga_instance: pygad.GA, solution, solution_idx, graph:nx.Graph) -> float:
-  return (2.0 * len(solution)) / nx.path_weight(graph, solution, 'weight')
 
 def manual_gen_stop(ga_instance: pygad.GA):
   """
@@ -283,29 +281,85 @@ def manual_gen_stop(ga_instance: pygad.GA):
 
 def empty_on_gen(ga_instance: pygad.GA):
   return  
+
+class GraphGA:
+  def __init__(self, graph, path_list):
+    self.graph = graph
+    self.path_list = path_list
+    self.gene_range = range(1, nx.number_of_nodes(self.graph) + 1)
+
+  def path_fitness(self, ga_instance: pygad.GA, solution, solution_idx) -> float:
+    return (2.0 * len(solution)) / nx.path_weight(self.graph, solution, 'weight')
   
-def make_ga(init_pop:list, gene_space:list, 
+  def make_ga(self, init_pop:list, gene_space:list, 
+            fit_func,
             n_gens: int=50, n_par_mate: int=4, 
             parent_keep: int=1, n_elites: int=2, #if n_elites != 0, then parent_keep is ignored in GA
-            fit_func = path_fitness,
             mut:str='inversion', mut_prob:float=0.4, 
             cross:str='two_points', cross_prob:float=0.2,
             on_gen=manual_gen_stop) -> pygad.GA:
-  if on_gen is None:
-    on_gen = empty_on_gen
+    if on_gen is None:
+      on_gen = empty_on_gen
   
-  return pygad.GA(num_generations=n_gens,
-                  num_parents_mating=n_par_mate,
-                  fitness_func=fit_func,
-                  crossover_type=cross, #pylance issue, this works
-                  crossover_probability=cross_prob,
-                  mutation_type=mut,
-                  mutation_probability=mut_prob,
-                  allow_duplicate_genes=False, #non-default, set and forget
-                  gene_space=gene_space,
-                  initial_population=init_pop,
-                  keep_parents=parent_keep,
-                  parent_selection_type='sss', #default, set and forget
-                  keep_elitism=n_elites,
-                  gene_type=int   #default, set and forget
-                  )
+    return pygad.GA(num_generations=n_gens,
+                    num_parents_mating=n_par_mate,
+                    fitness_func=fit_func,
+                    crossover_type=cross, #pylance issue, this works
+                    crossover_probability=cross_prob,
+                    mutation_type=mut,
+                    mutation_probability=mut_prob,
+                    allow_duplicate_genes=False, #non-default, set and forget
+                    gene_space=gene_space,
+                    initial_population=init_pop,
+                    keep_parents=parent_keep,
+                    parent_selection_type='sss', #default, set and forget
+                    keep_elitism=n_elites,
+                    gene_type=int,   #default, set and forget
+                    on_generation=empty_on_gen,
+                    on_start=on_start,
+                    on_crossover=on_crossover,
+                    on_fitness=on_fitness,
+                    on_parents=on_parents,
+                    on_mutation=on_mutation,
+                    on_stop=on_stop
+                    )
+  def reset_ga(self, n_gens:int=50):
+    self.ga = self.make_ga(self.path_list,list(self.gene_range),self.path_fitness, n_gens=n_gens)
+    
+  def run_ga(self):
+    self.ga.run()
+    
+  def give_solution(self):
+    solution, solution_fitness, solution_idx = self.ga.best_solution()
+    print(f"Parameters of the best solution : {solution}")
+    print(f"Fitness value of the best solution = {solution_fitness}")
+    print(f"Index of the best solution : {solution_idx}")
+    return self.ga.best_solution()
+    
+# def solve_ga_for_graph(graph_list:list, path_list:list):
+#   for i, graph in enumerate(graph_list):
+#     solution_paths = path_list[i]
+#     gene_range = range(1, nx.number_of_nodes(graph) + 1)
+    
+    
+  
+def on_start(ga_instance):
+    print("on_start()")
+
+def on_fitness(ga_instance, population_fitness):
+    print("on_fitness()")
+
+def on_parents(ga_instance, selected_parents):
+    print("on_parents()")
+
+def on_crossover(ga_instance, offspring_crossover):
+    print("on_crossover()")
+
+def on_mutation(ga_instance, offspring_mutation):
+    print("on_mutation()")
+
+def on_stop(ga_instance, last_population_fitness):
+    print("on_stop()")
+    
+def on_generation(ga_instance):
+    print("ge")
