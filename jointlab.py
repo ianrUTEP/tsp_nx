@@ -235,7 +235,7 @@ def solve_graphs_multgreedy(graph_list, n_greedys:int = 10):
   return solution_list
 
 def cycle_sol_to_path(sol_list:list):
-  return [[cycle[:-1] for cycle in graph] for graph in sol_list]
+  return [[cycle[:-1] if cycle else cycle for cycle in graph] for graph in sol_list]
 
 def save_solutions(solution_list, solution_filepath):
   print("Saving solution sets")
