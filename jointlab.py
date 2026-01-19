@@ -68,6 +68,7 @@ def make_solution_html(graph_list, canvas_height, sol_list: list, vis_opt_dict: 
       data['color'] = get_color_hex_in_range(data[color_scale_attr], palette, normalizer)      #str(#'+hex(random.randrange(0,2**24))[2:])
       # data['label'] = str(data.get('weight', 1)) #str(data['value'])
       data['font'] = {"size":1, "strokeWidth":0, "color":"#fffffff"}
+      data['title'] = str(data['weight'])
     print("generating graphvis html for graph", i)
     net = Network(height=canvas_height, width='100%', notebook=False)#, filter_menu=False, select_menu=False)
     net.from_nx(vis_graph)
