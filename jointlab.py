@@ -219,7 +219,7 @@ class GraphGA:
                 # Choose neighbor with smallest adjacency list
                 next_node = min(neighbors, key=lambda x: len(edge_map[x]))
             else:
-                next_node = random.choice(tuple(unused))
+                next_node = min(unused, key=lambda x: self.graph[current][x]['weight'])
 
             child.append(next_node)
             unused.remove(next_node)
