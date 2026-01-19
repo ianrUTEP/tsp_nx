@@ -15,6 +15,7 @@ if __name__ == "__main__":
   solution_filepath = args.solution_out
   solve_graphs = args.solve
   
+  with open('html_settings.json') as settings_file:
     html_set = json.load(settings_file)
   
   graph_list = jl.reset_graph_list(json_filepath)
