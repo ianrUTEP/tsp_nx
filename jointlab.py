@@ -131,10 +131,6 @@ def get_attribute_extremes(graph: nx.Graph, attribute: str):
 def get_color_hex_in_range(value, colormap: mcolors.ListedColormap, normalizer: mcolors.Normalize):
   return mcolors.to_hex(colormap(normalizer(value)))
 
-#This section constructs some prebuilt GA functions
-#
-#
-
 class GraphGA:
   def __init__(self, graph, path_list):
     self.graph = graph
@@ -144,15 +140,21 @@ class GraphGA:
   def path_fitness(self, ga_instance: pygad.GA, solution, solution_idx) -> float:
     return (2.0 * len(solution)) / nx.path_weight(self.graph, solution, 'weight')
   
-  def reset_ga(self, n_gens: int=50, n_par_mate: int=4, 
+  def run_ga(self):
+    self.ga.run()
+    
+  def reset_ga(self, n_gens: int=5, n_par_mate: int=120, 
               parent_keep: int=0, n_elites: int=2, #if n_elites != 0, then parent_keep is ignored in GA
               mut:str='inversion', mut_prob:float=0.4, 
-              cross:str='two_points', cross_prob:float=0.2):
+              cross:str='two_points', cross_prob:float=0.2, 
+              parent_choice:str='tournament', tour_k:int = 3):
   
     self.ga = pygad.GA(num_generations=n_gens,
                       num_parents_mating=n_par_mate,
                       crossover_type=cross,
                       crossover_probability=cross_prob,
+                      parent_selection_type=parent_choice,
+                      K_tournament=tour_k,
                       mutation_type=mut,
                       mutation_probability=mut_prob,
                       keep_parents=parent_keep,
@@ -165,18 +167,14 @@ class GraphGA:
                       allow_duplicate_genes=False, #non-default, set and forget
                       gene_type=int,   #default, set and forget
                       #default values
-                      parent_selection_type='sss', #default, set and forget
-                      on_generation=on_generation,
-                      on_start=on_start,
-                      on_crossover=on_crossover,
-                      on_fitness=on_fitness,
-                      on_parents=on_parents,
-                      on_mutation=on_mutation,
-                      on_stop=on_stop
+                      on_generation=self.on_generation,
+                      on_start=self.on_start,
+                      on_crossover=self.on_crossover,
+                      on_fitness=self.on_fitness,
+                      on_parents=self.on_parents,
+                      on_mutation=self.on_mutation,
+                      on_stop=self.on_stop
                       )
-   
-  def run_ga(self):
-    self.ga.run()
     
   def give_solution(self):
     solution, solution_fitness, solution_idx = self.ga.best_solution()
@@ -184,31 +182,24 @@ class GraphGA:
     print(f"Fitness value of the best solution = {solution_fitness}")
     print(f"Index of the best solution : {solution_idx}")
     return self.ga.best_solution()
-    
-# def solve_ga_for_graph(graph_list:list, path_list:list):
-#   for i, graph in enumerate(graph_list):
-#     solution_paths = path_list[i]
-#     gene_range = range(1, nx.number_of_nodes(graph) + 1)
-    
-    
-  
-def on_start(ga_instance):
-    print("Starting GA search")
 
-def on_fitness(ga_instance, population_fitness):
-    print("Computing fitness")
+  def on_start(self, ga_instance):
+      print("Starting GA search")
 
-def on_parents(ga_instance, selected_parents):
-    print("Selecting parents")
+  def on_fitness(self, ga_instance, population_fitness):
+      print("Computing fitness")
 
-def on_crossover(ga_instance, offspring_crossover):
-    print("Performing crossovers")
+  def on_parents(self, ga_instance, selected_parents):
+      print("Selecting parents")
 
-def on_mutation(ga_instance, offspring_mutation):
-    print("Mutating")
+  def on_crossover(self, ga_instance, offspring_crossover):
+      print("Performing crossovers")
 
-def on_stop(ga_instance, last_population_fitness):
-    print("Ending GA search")
-    
-def on_generation(ga_instance):
-    print("Generation: ", ga_instance.generations_completed)
+  def on_mutation(self, ga_instance, offspring_mutation):
+      print("Mutating")
+
+  def on_stop(self, ga_instance, last_population_fitness):
+      print("Ending GA search")
+      
+  def on_generation(self, ga_instance):
+      print("Generation: ", ga_instance.generations_completed)
