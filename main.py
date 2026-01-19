@@ -9,18 +9,15 @@ if __name__ == "__main__":
   parser.add_argument('json_filepath', type=str)
   parser.add_argument('solution_out', type=str)
   parser.add_argument('-s', '--solve', default=False, action='store_true')
-  parser.add_argument('-c', '--complete_graph', default=False, action='store_true')
   args = parser.parse_args()
   
   json_filepath = args.json_filepath
   solution_filepath = args.solution_out
   solve_graphs = args.solve
-  make_complete_graph = args.complete_graph
   
-  with open('html_settings.json') as settings_file:
     html_set = json.load(settings_file)
   
-  graph_list = jl.reset_graph_list(json_filepath, make_complete_graph)
+  graph_list = jl.reset_graph_list(json_filepath)
 
   if solve_graphs:
     solution_list = jl.solve_graphs_greedy(graph_list)
