@@ -3,6 +3,7 @@ import argparse
 import jointlab as jl
 import json
 import importlib #for use in interactive
+import dill #for use in interactive
 
 if __name__ == "__main__":
   parser = argparse.ArgumentParser()
