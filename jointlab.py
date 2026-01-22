@@ -88,12 +88,12 @@ def solve_graphs_greedy(graph_list):
     solution_list.append(sol)
   return solution_list
 
-def solve_graphs_multgreedy(graph_list, n_greedys:int = 10):
+def solve_graphs_multgreedy(graph_list, n_greedys:int = 10, guaranteed:int = 1)->list:
   solution_list = []
   print("Beginning search for solutions")
   for i, graph in enumerate(graph_list):
     graph_sols = []
-    sources = np.insert(np.random.randint(1, nx.number_of_nodes(graph) + 1, n_greedys-1), 0, 1) #plus one to limit to include, generate n-1 and add 1 as guaranteed source
+    sources = np.insert(random.sample(sorted(nx.nodes(graph)), n_greedys-1), 0, guaranteed) #plus one to limit to include, generate n-1 and add 1 as guaranteed source
     for j, source in enumerate(sources):
       print("graph", i, "sol", j)
       graph_sols.append(nx.approximation.greedy_tsp(graph, source=int(source)))
@@ -151,7 +151,7 @@ class GraphGA:
   def __init__(self, graph, path_list):
     self.graph = graph
     self.path_list = path_list
-    self.gene_range = range(1, nx.number_of_nodes(self.graph) + 1)
+    self.gene_range = sorted(nx.nodes(graph)) #range(1, nx.number_of_nodes(self.graph) + 1)
 
   def path_fitness(self, ga_instance: pygad.GA, solution, solution_idx) -> float:
     return (2.0 * len(solution)) / nx.path_weight(self.graph, solution, 'weight')
