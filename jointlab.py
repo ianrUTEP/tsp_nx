@@ -41,7 +41,7 @@ def make_solution_html(graph_list, canvas_height, sol_list: list, vis_opt_dict: 
     vis_graph: nx.Graph = nx.create_empty_copy(graph)
     edges = [(sol_list[i][j], sol_list[i][j+1]) for j in range(len(sol_list[i])-1)]
     for u,v in edges:
-      vis_graph.add_edge(u, v, weight=graph.edges[u,v]['weight'])
+      vis_graph.add_edge(u, v, weight=graph.edges[u,v]['weight'], length=graph.edges[u,v]['length'], alignment=graph.edges[u,v]['alignment'])
     print("generating graphvis data for graph", i)
     coords = np.array(list(nx.get_node_attributes(vis_graph, 'pos').values()))
     x_coords = coords[:, 0]
@@ -68,7 +68,7 @@ def make_solution_html(graph_list, canvas_height, sol_list: list, vis_opt_dict: 
       data['color'] = get_color_hex_in_range(data[color_scale_attr], palette, normalizer)      #str(#'+hex(random.randrange(0,2**24))[2:])
       # data['label'] = str(data.get('weight', 1)) #str(data['value'])
       data['font'] = {"size":1, "strokeWidth":0, "color":"#fffffff"}
-      data['title'] = str(data['weight'])
+      # data['title'] = ';'.join([str(data['length']), str(data['weight']), str(data['alignment'])])
     print("generating graphvis html for graph", i)
     net = Network(height=canvas_height, width='100%', notebook=False)#, filter_menu=False, select_menu=False)
     net.from_nx(vis_graph)
@@ -100,7 +100,7 @@ def solve_graphs_multgreedy(graph_list, n_greedys:int = 10):
     solution_list.append(graph_sols)
   return solution_list
 
-def cycle_sol_to_path_simple(sol_list:list):
+def cycle_sol_to_path_simple(sol_list:list)->list:
   return [[cycle[:-1] if cycle else cycle for cycle in graph] for graph in sol_list]
 
 def cycle_to_path(sol_list:list, graph_list:list)->list:
@@ -235,9 +235,9 @@ class GraphGA:
 
     return np.array(offspring)
   
-  def reset_ga(self, n_gens: int=5, n_par_mate: int=120, 
+  def reset_ga(self, n_gens: int=5, n_par_mate: int=120,
               parent_keep: int=0, n_elites: int=2, #if n_elites != 0, then parent_keep is ignored in GA
-              mut:str='inversion', mut_prob:float=0.4, 
+              mut:str='inversion', mut_prob:float=0.4,
               cross_prob:float=0.2, #doesn't really matter with custom crossovers
               cross_type:str='edge_recomb',
               parent_choice:str='tournament', tour_k:int = 3):
