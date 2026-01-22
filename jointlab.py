@@ -124,13 +124,13 @@ def save_solutions(solution_list:list, solution_filepath:str):
   sol_array = np.array(solution_list, dtype=np.uint16)
   np.savetxt(solution_filepath,sol_array.transpose(),delimiter=',',fmt='%i')
 
-def add_weights(graph_list):
+def add_weights(graph_list, travel_threshold:float=1.6):
   for graph in graph_list:
     for u, v, data in graph.edges(data=True):
       if data['alignment'] != 0:
-        data['weight'] = data['alignment']
+        data['weight'] = data['alignment'] + (data['length'] / travel_threshold) # 1 to 2 + d(0,1] = d[2,3] because 1 added already
       else:
-        data['weight'] = 2 + data['length']
+        data['weight'] = 3 + (data['length'] / travel_threshold) # 2 + length, minimum 2 + 2*EW 
 
 def get_attribute_extremes(graph: nx.Graph, attribute: str):
   attrList = nx.get_edge_attributes(graph, attribute) #gets iterable list of specified attribute
