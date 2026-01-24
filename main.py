@@ -9,12 +9,20 @@ if __name__ == "__main__":
   parser = argparse.ArgumentParser()
   parser.add_argument('json_filepath', type=str)
   parser.add_argument('solution_out', type=str)
+  parser.add_argument('log_file', type=str)
+  parser.add_argument('log_file_level', type=str)
+  parser.add_argument('console_level', type=str)
   parser.add_argument('-s', '--solve', default=False, action='store_true')
   args = parser.parse_args()
   
   json_filepath = args.json_filepath
   solution_filepath = args.solution_out
+  log_file = args.log_file
+  file_level_str = args.log_file_level
+  console_level_str = args.console_level
   solve_graphs = args.solve
+  
+  logger = jl.create_logger(log_file, file_level_str, console_level_str)
   
   with open('html_settings.json') as settings_file:
     html_set = json.load(settings_file)

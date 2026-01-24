@@ -8,6 +8,7 @@ from datetime import datetime
 import seaborn as sns
 import matplotlib.colors as mcolors
 import pygad
+import logging
 
 def reset_graph_list(json_filepath):
   new_graph_list = []
@@ -124,6 +125,44 @@ def save_solutions(solution_list:list, solution_filepath:str):
   sol_array = np.array(solution_list, dtype=np.uint16)
   np.savetxt(solution_filepath,sol_array.transpose(),delimiter=',',fmt='%i')
 
+def create_logger(logfile_name:str, logfile_level:str, console_level:str)-> logging.Logger:
+  print('Creating logger')
+  match logfile_level:
+    case 'debug':
+      lf_lev = logging.DEBUG #filters to debug and above, not recommended for console
+    case 'info':
+      lf_lev = logging.INFO
+    case 'none':
+      lf_lev = None
+    case _:
+      lf_lev = None
+  match console_level:
+    case 'debug':
+      c_lev = logging.DEBUG #filters to debug and above, not recommended for console
+    case 'info':
+      c_lev = logging.INFO #filters to info and above, good for console
+    case 'none':
+      c_lev = None
+    case _:
+      c_lev = None
+  logger = logging.getLogger(logfile_name)
+  logger.setLevel(logging.DEBUG)
+  
+  if lf_lev is not None:
+    file_handler = logging.FileHandler(logfile_name,'a+','utf-8')
+    file_handler.setLevel(lf_lev)
+    file_format = logging.Formatter('%(asctime)s %(levelname)s: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+    file_handler.setFormatter(file_format)
+    logger.addHandler(file_handler)
+  if c_lev is not None:
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(c_lev)
+    console_format = logging.Formatter('%(message)s')
+    console_handler.setFormatter(console_format)
+    logger.addHandler(console_handler)
+  
+  return logger
+  
 def add_weights(graph_list, travel_threshold:float=1.6):
   for graph in graph_list:
     for u, v, data in graph.edges(data=True):
@@ -148,10 +187,11 @@ def get_color_hex_in_range(value, colormap: mcolors.ListedColormap, normalizer: 
   return mcolors.to_hex(colormap(normalizer(value)))
 
 class GraphGA:
-  def __init__(self, graph, path_list):
+  def __init__(self, graph, path_list, logger):
     self.graph = graph
     self.path_list = path_list
     self.gene_range = sorted(nx.nodes(graph)) #range(1, nx.number_of_nodes(self.graph) + 1)
+    self.logger:logging.Logger = logger
 
   def path_fitness(self, ga_instance: pygad.GA, solution, solution_idx) -> float:
     return (2.0 * len(solution)) / nx.path_weight(self.graph, solution, 'weight')
@@ -275,7 +315,7 @@ class GraphGA:
                       on_mutation=self.on_mutation,
                       on_stop=self.on_stop
                       )
-    
+  
   def give_solution(self):
     solution, solution_fitness, solution_idx = self.ga.best_solution()
     print(f"Parameters of the best solution : {solution}")
@@ -285,24 +325,24 @@ class GraphGA:
     return self.ga.best_solution()
 
   def on_start(self, ga_instance):
-      print("Starting GA search")
+      self.logger.info("Starting GA search")
 
   def on_fitness(self, ga_instance, population_fitness):
-      print("Computed fitness")
+      self.logger.info("Computed fitness")
 
   def on_parents(self, ga_instance, selected_parents):
-      print("Selected parents")
+      self.logger.info("Selected parents")
 
   def on_crossover(self, ga_instance, offspring_crossover):
-      print("Performed crossovers")
+      self.logger.info("Performed crossovers")
 
   def on_mutation(self, ga_instance, offspring_mutation):
-      print("Mutated")
+      self.logger.info("Mutated")
 
   def on_stop(self, ga_instance, last_population_fitness):
-      print("Ending GA search")
+      self.logger.info("Ending GA search")
       
-  def on_generation(self, ga_instance):
-      print("Generation:", ga_instance.generations_completed)
-      print("Fitness of best:", ga_instance.best_solution()[1])
-      
+  def on_generation(self, ga_instance:pygad.GA):
+      self.logger.info(ga_instance.generations_completed)
+      self.logger.info(ga_instance.best_solution()[1])
+      self.logger.debug(ga_instance.population)
