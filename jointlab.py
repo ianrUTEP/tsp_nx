@@ -10,6 +10,7 @@ import matplotlib.colors as mcolors
 import pygad
 import logging
 
+#region Load Graphs
 def reset_graph_list(json_filepath):
   new_graph_list = []
   print("Attempting to load the graphs")
@@ -34,7 +35,9 @@ def complete_graph_from_row(row: tuple) -> nx.Graph:
     u_str, v_str = edge_str.split(',')
     G.add_edge(int(u_str), int(v_str), length=edge_data['len'], alignment=edge_data['align']) #no weight given yet
   return G
-    
+#endregion Load Graphs
+
+#region Visualization
 def make_solution_html(graph_list, canvas_height, sol_list: list, vis_opt_dict: dict = {}, color_scale_attr: str = 'weight'):
   timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
   for i, graph in enumerate(graph_list):
@@ -79,7 +82,12 @@ def make_solution_html(graph_list, canvas_height, sol_list: list, vis_opt_dict: 
     net.show_buttons()#filter_=['nodes', 'edges', 'selection', 'renderer', 'interaction', 'phsyics'])
     net.set_options(' '.join(['var','options','=',json.dumps(vis_opt_dict)]))
     net.save_graph(name='/'.join(['./graphvisuals','.'.join(['_'.join([timestamp, 'graph', str(i)]),'html'])]))
+    
+def get_color_hex_in_range(value, colormap: mcolors.ListedColormap, normalizer: mcolors.Normalize):
+  return mcolors.to_hex(colormap(normalizer(value)))
+#endregion Visualization
       
+#region Greedy Solvers
 def solve_graphs_greedy(graph_list):
   solution_list = []
   print("Beginning search for solutions")
@@ -119,7 +127,9 @@ def cycle_to_path(sol_list:list, graph_list:list)->list:
       graph_path_sols.append(cycle[largest_edge_pos+1:-1] + cycle[:largest_edge_pos+1]) #everything that comes after the bad edge, not including the last (duplicated) node from the cycle + everything that comes before the bad edge
     all_path_sols.append(graph_path_sols)
   return all_path_sols
+#endregion Greedy Solvers
 
+#region Outputs
 def save_solutions(solution_list:list, solution_filepath:str):
   print("Saving solution sets")
   sol_array = np.array(solution_list, dtype=np.uint16)
@@ -163,6 +173,9 @@ def create_logger(logfile_name:str, logfile_level:str, console_level:str)-> logg
   
   return logger
   
+#endregion Outputs
+
+#region Modify Graphs
 def add_weights(graph_list, travel_threshold:float=1.6):
   for graph in graph_list:
     for u, v, data in graph.edges(data=True):
@@ -182,10 +195,9 @@ def get_attribute_extremes(graph: nx.Graph, attribute: str):
     if attrList[edge] < minAtt:
       minAtt = attrList[edge]
   return (minAtt, maxAtt)
+#endregion Modify Graphs
 
-def get_color_hex_in_range(value, colormap: mcolors.ListedColormap, normalizer: mcolors.Normalize):
-  return mcolors.to_hex(colormap(normalizer(value)))
-
+#region GA Class
 class GraphGA:
   def __init__(self, graph, path_list, logger):
     self.graph = graph
@@ -199,6 +211,7 @@ class GraphGA:
   def run_ga(self):
     self.ga.run()
   
+  #region GA.Crossovers
   def order_crossover(self, parents, offspring_size, ga_instance):
     offspring = []
 
@@ -274,6 +287,7 @@ class GraphGA:
         offspring.append(child)
 
     return np.array(offspring)
+  #endregion GA.Crossovers
   
   def reset_ga(self, n_gens: int=5, n_par_mate: int=120,
               parent_keep: int=0, n_elites: int=2, #if n_elites != 0, then parent_keep is ignored in GA
@@ -324,6 +338,7 @@ class GraphGA:
     print(f"Weight of the solution = {nx.path_weight(self.graph, solution, 'weight')}")
     return self.ga.best_solution()
 
+  #region GA.On-Functions
   def on_start(self, ga_instance):
       self.logger.info("Starting GA search")
 
@@ -346,3 +361,5 @@ class GraphGA:
       self.logger.info(ga_instance.generations_completed)
       self.logger.info(ga_instance.best_solution()[1])
       self.logger.debug(ga_instance.population)
+  #endregion GA.On-Functions
+#endregion GA Class
