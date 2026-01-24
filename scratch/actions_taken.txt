@@ -1,0 +1,35 @@
+jl.add_weights(graph_list)
+
+greedy_cycles_large = jl.solve_graphs_multgreedy(graph_list,n_greedys=300)
+...LONG WAIT
+
+with open('300_greedy_cycles.pkl', 'wb') as f:
+    dill.dump(greedy_cycles_large, f)
+    
+greedy_paths_large = jl.cycle_to_path(greedy_cycles_large, graph_list)
+
+with open('300_greedy_paths.pkl', 'wb') as f:
+    dill.dump(greedy_paths_large, f)
+    
+bigGA = jl.GraphGA(graph_list[0], greedy_paths_large[0])
+
+bigGA.reset_ga(n_gens=5) #all else stays same, uses fast e_recon
+
+bigGA.run_ga()
+
+bigGA5 = bigGA.get_solution()
+
+nx.path_weight(graph_list[0], bigGA5[0].tolist(), 'weight')
+
+jl.make_solution_html(graph_list, 1000, [bigGA5[0].tolist()], html_set) 
+#no improvement between any generations, likely matched some original path
+
+
+#rebuild to include order
+del bigGA
+importlib.reload(jl)
+bigGA = jl.GraphGA(graph_list[0],greedy_paths_large[0])
+bigGA.reset_ga(n_gens=5,cross_type='order')
+bigGA.run_ga()
+
+#canceled because seemed slower than edge reconstruction
