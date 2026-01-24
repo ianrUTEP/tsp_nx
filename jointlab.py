@@ -136,7 +136,7 @@ def save_solutions(solution_list:list, solution_filepath:str):
   np.savetxt(solution_filepath,sol_array.transpose(),delimiter=',',fmt='%i')
 
 def create_logger(logfile_name:str, logfile_level:str, console_level:str)-> logging.Logger:
-  print('Creating logger')
+  print("Creating logger")
   match logfile_level:
     case 'debug':
       lf_lev = logging.DEBUG #filters to debug and above, not recommended for console
@@ -290,18 +290,26 @@ class GraphGA:
   #endregion GA.Crossovers
   
   def reset_ga(self, n_gens: int=5, n_par_mate: int=120,
-              parent_keep: int=0, n_elites: int=2, #if n_elites != 0, then parent_keep is ignored in GA
-              mut:str='inversion', mut_prob:float=0.4,
-              cross_prob:float=0.2, #doesn't really matter with custom crossovers
-              cross_type:str='edge_recomb',
-              parent_choice:str='tournament', tour_k:int = 3):
+        parent_keep: int=0, n_elites: int=2, #if n_elites != 0, then parent_keep is ignored in GA
+        mut:str='inversion', mut_prob:float=0.4,
+        cross_prob:float=0.2, #doesn't really matter with custom crossovers
+        cross_type:str='edge_recomb',
+        parent_choice:str='tournament', tour_k:int = 3,
+        init_pop:bool=True, sol_per_pop:int=30):
 
+    #convert string parameter to class type
     if cross_type == 'edge_recomb':
       crossover = self.fast_edge_recombination_crossover
     elif cross_type == 'order':
       crossover = self.order_crossover
     else:
       crossover = 'single_point'
+
+    #clear the starting population if it isn't to be used
+    if init_pop is False:
+      start_pop = None
+    else:
+      start_pop = self.path_list
 
     self.ga = pygad.GA(num_generations=n_gens,
                       num_parents_mating=n_par_mate,
@@ -316,7 +324,9 @@ class GraphGA:
                       crossover_type=crossover, #type: ignore #locked from the class
                       fitness_func=self.path_fitness, #locked from the class
                       gene_space=list(self.gene_range), #locked from the class
-                      initial_population=self.path_list,  #locked from the class
+                      initial_population=start_pop,  #locked from the class
+                      sol_per_pop=sol_per_pop,
+                      num_genes=len(self.gene_range),
                       #non-default values
                       allow_duplicate_genes=False, #non-default, set and forget
                       gene_type=int,   #default, set and forget
