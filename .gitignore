@@ -13,3 +13,6 @@ tsp_nx_win.code-workspace
 logs
 #too many pickles for when I dump sessions, don't need git to keep track of them
 pickles
+#don't back up any graph json files that are too large
+graph_making/SENT 2.json
+graph_making/testGraphListArray.json
