@@ -16,3 +16,4 @@ pickles
 #don't back up any graph json files that are too large
 graph_making/SENT 2.json
 graph_making/testGraphListArray.json
+active_work.txt

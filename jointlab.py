@@ -97,12 +97,15 @@ def solve_graphs_greedy(graph_list):
     solution_list.append(sol)
   return solution_list
 
-def solve_graphs_multgreedy(graph_list, n_greedys:int = 10, guaranteed:int = 1)->list:
+def solve_graphs_multgreedy(graph_list, n_greedys:int = 10, guaranteed:int = -1)->list:
   solution_list = []
   print("Beginning search for solutions")
   for i, graph in enumerate(graph_list):
     graph_sols = []
-    sources = np.insert(random.sample(sorted(nx.nodes(graph)), n_greedys-1), 0, guaranteed) #plus one to limit to include, generate n-1 and add 1 as guaranteed source
+    if guaranteed != -1:
+      sources = np.insert(random.sample(sorted(nx.nodes(graph)), n_greedys-1), 0, guaranteed) #plus one to limit to include, generate n-1 and add 1 as guaranteed source
+    else: 
+      sources = random.sample(sorted(nx.nodes(graph)), n_greedys)
     for j, source in enumerate(sources):
       print("graph", i, "sol", j)
       graph_sols.append(nx.approximation.greedy_tsp(graph, source=int(source)))
