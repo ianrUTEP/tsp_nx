@@ -112,6 +112,7 @@ def solve_graphs_multgreedy(graph_list, n_greedys:int = 10, guaranteed:int = -1)
     solution_list.append(graph_sols)
   return solution_list
 
+#depricated
 def cycle_sol_to_path_simple(sol_list:list)->list:
   return [[cycle[:-1] if cycle else cycle for cycle in graph] for graph in sol_list]
 
@@ -222,7 +223,7 @@ class LogFileMaker:
 #endregion Outputs
 
 #region Modify Graphs
-def add_weights(graph_list, travel_threshold:float=1.6):
+def add_weights(graph_list, travel_threshold:float=0.8):
   for graph in graph_list:
     for u, v, data in graph.edges(data=True):
       if data['alignment'] != 0:
