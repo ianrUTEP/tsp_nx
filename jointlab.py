@@ -152,12 +152,24 @@ def solve_multdfs(graph_list, n_dfs:int = 1, use_first:bool = True)->list:
 #endregion Sol.DFS
 #endregion Solvers
 
-
 #region Outputs
 def save_solutions(solution_list:list, solution_filepath:str):
   print("Saving solution sets")
   sol_array = np.array(solution_list, dtype=np.uint16)
   np.savetxt(solution_filepath,sol_array.transpose(),delimiter=',',fmt='%i')
+  
+def select_best_sol(graph_list:list, solution_list:list, cost_attr:str="weight")->list:
+  best_sols = []
+  for i, graph in enumerate(graph_list):
+    best_j = -1
+    best_w = float("inf")
+    for j, solution in enumerate(solution_list[i]):
+      w = nx.path_weight(graph, solution,cost_attr)
+      if w < best_w:
+        best_j = j
+        best_w = w
+    best_sols.append(solution_list[i][best_j])
+  return best_sols
 
 #region Out.LogFileMaker
 class LogFileMaker:
