@@ -87,7 +87,8 @@ def get_color_hex_in_range(value, colormap: mcolors.ListedColormap, normalizer: 
   return mcolors.to_hex(colormap(normalizer(value)))
 #endregion Visualization
       
-#region Greedy Solvers
+#region Solvers
+#region Sol.Greedy
 def solve_graphs_greedy(graph_list):
   solution_list = []
   print("Beginning search for solutions")
@@ -131,7 +132,26 @@ def cycle_to_path(sol_list:list, graph_list:list)->list:
       graph_path_sols.append(cycle[largest_edge_pos+1:-1] + cycle[:largest_edge_pos+1]) #everything that comes after the bad edge, not including the last (duplicated) node from the cycle + everything that comes before the bad edge
     all_path_sols.append(graph_path_sols)
   return all_path_sols
-#endregion Greedy Solvers
+#endregion Sol.Greedy
+
+#region Sol.DFS
+def solve_graphs_multdfs(graph_list, n_dfs:int = 1, use_first:bool = True)->list:
+  dfs_sols = []
+  for i, graph in enumerate(graph_list):
+    graph_sols = []
+    if use_first:
+      sources = np.insert(random.sample(sorted(nx.nodes(graph)), n_dfs-1), 0, list(graph.nodes())[0])
+    else:
+      sources = random.sample(sorted(nx.nodes(graph)), n_dfs)
+    for j, source in enumerate(sources):
+      print("graph", i, "sol", j)
+      dfs = DDFS(graph, source, i, )
+      graph_sols.append(dfs.search())
+    dfs_sols.append(graph_sols)
+  return dfs_sols
+#endregion Sol.DFS
+#endregion Solvers
+
 
 #region Outputs
 def save_solutions(solution_list:list, solution_filepath:str):
