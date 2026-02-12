@@ -247,9 +247,9 @@ def add_weights(graph_list, travel_threshold:float=0.8):
   for graph in graph_list:
     for u, v, data in graph.edges(data=True):
       if data['alignment'] != 0:
-        data['weight'] = data['alignment'] + (data['length'] / travel_threshold) # 1 to 2 + d(0,1] = d[2,3] because 1 added already
+        data['weight'] = data['alignment'] + (data['length'] / travel_threshold)**2# 1 to 2 + d(0,1] = d[2,3] because 1 added already
       else:
-        data['weight'] = 3 + (data['length'] / travel_threshold) # 2 + length, minimum 2 + 2*EW 
+        data['weight'] = 3 + (data['length'] / travel_threshold)**2 # 2 + length, minimum 2 + 2*EW 
 
 def get_attribute_extremes(graph: nx.Graph, attribute: str):
   attrList = nx.get_edge_attributes(graph, attribute) #gets iterable list of specified attribute
