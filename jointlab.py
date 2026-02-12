@@ -244,6 +244,105 @@ def get_attribute_extremes(graph: nx.Graph, attribute: str):
   return (minAtt, maxAtt)
 #endregion Modify Graphs
 
+#region DDFS Class
+class DDFS:
+  def __init__(self, graph:nx.Graph, 
+              start_node:int = 0,
+              graph_num:int=0,
+              logger=None):
+    self.log:logging.Logger = logger if logger is not None else LogFileMaker.create_logger("/".join(["./logs","_".join([datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),"graph",str(graph_num),"ddfs.txt"])])) 
+    self.g:nx.Graph = graph #graph object
+    self.n_count:int = len(self.g.nodes())
+    self.start = start_node
+    self.setup()
+  
+  def setup(self, ):
+    self.in_path:set = set()  #nodes existing in the path
+    try:
+      inital_edges = self.get_edges_from_node(self.start) #get the edges from the start node
+    except Exception as e:
+      self.log.error("Error at initializing DDFS", exc_info=e)
+      self.close_log
+      return
+    self.branches:list = [inital_edges.copy(), inital_edges.copy()] #stores edges in sorted depth-first by level for each branch
+    self.in_path.add(self.start) #tracks nodes included in the path
+    self.path:list = [self.start] #the actual solution path. B1 prepends, B2 appends
+  
+  # closes out the logger to release the file without closing python
+  def close_log(self):
+    for handler in self.log.handlers:
+      self.log.removeHandler(handler)
+  
+  def get_edges_from_node(self, new_node:int)-> list:
+    self.log.debug("Getting edges from node %s", str(new_node))
+    #get the graph that remains to be added
+    g_rem = self.g.subgraph(self.g.nodes() - self.in_path) #doesn't make a copy, just a subgraph view
+    new_edges = []  #list of new edges to add to this branch
+    for u, v, data in g_rem.edges(new_node, data=True): #iterate through subgraph edges connected to new node
+      #store neighbor node and the weight of the edge
+      # self.log.debug("New edge detected: ",u,v,data['weight'])
+      new_edges.append((v, data['weight']))
+    #sort the new edges based on their weight
+    new_edges.sort(key=lambda e: e[1])
+    self.log.debug("New edge collection sorted by weight: %s", str(new_edges))
+    #TODO: consider implementing a limit to the number of edges returned to prevent the search tree from growing too large
+    #This would allow me to do the original plan and not remove edges when consumed so that they remain when backtracked
+    #However, this could lead to cases where all of the cheapest edges are to already explored nodes and the DFS fails
+    return new_edges
+  
+  def add_edges_to_branch(self, branch:int, new_node:int):
+    self.log.debug("Updating branch %d from node %d", branch, new_node)
+    edges = self.get_edges_from_node(new_node)
+    #update information now that it is done
+    self.in_path.add(new_node)
+    #prepend or append to path based on branch, update branch edges
+    if branch == 0:
+      self.branches[0] = edges + self.branches[0]
+      self.path = [new_node] + self.path
+      self.log.debug("branches[0]: %s", str(self.branches[0]))
+    else:
+      self.branches[1] = edges + self.branches[1]
+      self.path.append(new_node)
+      self.log.debug("branches[1]: %s", str(self.branches[1]))
+    self.log.debug("path: %s", str(self.path))
+
+  # removes front nodes from branches until the frontmost is not already in the path
+  def clear_dead_limbs(self):
+    for i, branch in enumerate(self.branches):
+      popped:int = 0
+      try:
+        while branch[0][0] in self.in_path:
+          branch.pop(0)
+          popped += 1
+      except Exception as e:
+        self.log.debug("Failure in clearing branches: ", exc_info=e)
+      self.log.debug("Popped %d from branch %d", popped, i)
+
+  # choses the branch with the next lowest cost. This is where exploration could happen
+  def select_branch(self)->int:
+    cheapest_w = float('inf')
+    cheapest_i:int = 0
+    for i, branch in enumerate(self.branches):
+      if branch[0][1] < cheapest_w:
+        cheapest_w = branch[0][1]
+        cheapest_i = i
+    self.log.debug("Selected branch %d with weight %.4f", cheapest_i, cheapest_w)
+    return cheapest_i
+  
+  # perform other functions automatically until the search is complete
+  def search(self)->list:
+    while len(self.path) < self.n_count:
+      self.clear_dead_limbs()
+      next_branch = self.select_branch()
+      next_node, next_weight = self.branches[next_branch].pop(0)  #grab the front of the chosen branch
+      self.add_edges_to_branch(next_branch, next_node)
+    return self.path
+  
+  def reset(self):
+    self.log.info("RESETTING SEARCH ENTIRELY")
+    self.setup()
+#endregion DDFS Class
+
 #region GA Class
 class GraphGA:
   def __init__(self, graph, path_list, graph_num:int=0, logger=None):
