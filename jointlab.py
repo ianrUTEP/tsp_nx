@@ -138,44 +138,87 @@ def save_solutions(solution_list:list, solution_filepath:str):
   sol_array = np.array(solution_list, dtype=np.uint16)
   np.savetxt(solution_filepath,sol_array.transpose(),delimiter=',',fmt='%i')
 
-def create_logger(logfile_name:str, logfile_level:str, console_level:str)-> logging.Logger:
-  print("Creating logger")
-  match logfile_level:
-    case 'debug':
-      lf_lev = logging.DEBUG #filters to debug and above, not recommended for console
-    case 'info':
-      lf_lev = logging.INFO
-    case 'none':
-      lf_lev = None
-    case _:
-      lf_lev = None
-  match console_level:
-    case 'debug':
-      c_lev = logging.DEBUG #filters to debug and above, not recommended for console
-    case 'info':
-      c_lev = logging.INFO #filters to info and above, good for console
-    case 'none':
-      c_lev = None
-    case _:
-      c_lev = None
-  logger = logging.getLogger(logfile_name)
-  logger.setLevel(logging.DEBUG)
+#region Out.LogFileMaker
+class LogFileMaker:
+  #static "private" values shared between the class as a default for creating logs
+  global_lf_lev = logging.DEBUG
+  global_c_lev = logging.INFO
   
-  if lf_lev is not None:
-    file_handler = logging.FileHandler(logfile_name,'a+','utf-8')
-    file_handler.setLevel(lf_lev)
-    file_format = logging.Formatter('%(asctime)s %(levelname)s: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
-    file_handler.setFormatter(file_format)
-    logger.addHandler(file_handler)
-  if c_lev is not None:
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(c_lev)
-    console_format = logging.Formatter('%(message)s')
-    console_handler.setFormatter(console_format)
-    logger.addHandler(console_handler)
+  #create and set the global variables. Creating a new one is the only way to change it
+  def __init__(self, logfile_level:str, console_level:str):
+    #set a global level at initalization of class
+    self.set_globals(logfile_level,console_level)
   
-  return logger
+  @classmethod
+  def set_globals(cls, new_g_lf_lev, new_g_c_lev):
+    match new_g_lf_lev:
+      case 'debug':
+        cls.global_lf_lev = logging.DEBUG #filters to debug and above, not recommended for console
+      case 'info':
+        cls.global_lf_lev = logging.INFO
+      case 'none':
+        cls.global_lf_lev = None
+      case _:
+        cls.global_lf_lev = None
+    match new_g_c_lev:
+      case 'debug':
+        cls.global_c_lev = logging.DEBUG #filters to debug and above, not recommended for console
+      case 'info':
+        cls.global_c_lev = logging.INFO #filters to info and above, good for console
+      case 'none':
+        cls.global_c_lev = None
+      case _:
+        cls.global_c_lev = None
   
+  #Uses the globals and the input values to return levels
+  @classmethod
+  def set_levels(cls, new_lf_lev, new_c_lev):
+    match new_lf_lev:
+      case 'global':
+        lf_lev = cls.global_lf_lev #use the global set initially
+      case 'debug':
+        lf_lev = logging.DEBUG #filters to debug and above, not recommended for console
+      case 'info':
+        lf_lev = logging.INFO
+      case 'none':
+        lf_lev = None
+      case _:
+        lf_lev = None
+    match new_c_lev:
+      case 'global':
+        c_lev = cls.global_c_lev #use the global set initially
+      case 'debug':
+        c_lev = logging.DEBUG #filters to debug and above, not recommended for console
+      case 'info':
+        c_lev = logging.INFO #filters to info and above, good for console
+      case 'none':
+        c_lev = None
+      case _:
+        c_lev = None
+    return lf_lev, c_lev
+  
+  #Creates a new logger
+  @classmethod
+  def create_logger(cls, logfile_name:str, logfile_level:str='global', console_level:str='global')-> logging.Logger:
+    print("Creating logger:", logfile_name, "with file and console:", logfile_level, console_level)
+    #set the levels for the class, but not the global status
+    lf_lev, c_lev = cls.set_levels(logfile_level,console_level)
+    logger = logging.getLogger(logfile_name)
+    logger.setLevel(logging.DEBUG)
+    if lf_lev is not None:
+      file_handler = logging.FileHandler(logfile_name,'a+','utf-8')
+      file_handler.setLevel(lf_lev)
+      file_format = logging.Formatter('%(asctime)s %(levelname)s: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+      file_handler.setFormatter(file_format)
+      logger.addHandler(file_handler)
+    if c_lev is not None:
+      console_handler = logging.StreamHandler()
+      console_handler.setLevel(c_lev)
+      console_format = logging.Formatter('%(message)s')
+      console_handler.setFormatter(console_format)
+      logger.addHandler(console_handler)
+    return logger
+#endregion Out.LogFileMaker  
 #endregion Outputs
 
 #region Modify Graphs
@@ -202,11 +245,15 @@ def get_attribute_extremes(graph: nx.Graph, attribute: str):
 
 #region GA Class
 class GraphGA:
-  def __init__(self, graph, path_list, logger):
+  def __init__(self, graph, path_list, graph_num:int=0, logger=None):
     self.graph = graph
     self.path_list = path_list
     self.gene_range = sorted(nx.nodes(graph)) #range(1, nx.number_of_nodes(self.graph) + 1)
-    self.logger:logging.Logger = logger
+    self.log:logging.Logger = logger if logger is not None else LogFileMaker.create_logger("/".join(["./logs","_".join([datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),"graph",str(graph_num),"ga.txt"])]))
+
+  def close_log(self):
+    for handler in self.log.handlers:
+      self.log.removeHandler(handler)
 
   def path_fitness(self, ga_instance: pygad.GA, solution, solution_idx) -> float:
     return (2.0 * len(solution)) / nx.path_weight(self.graph, solution, 'weight')
@@ -353,26 +400,26 @@ class GraphGA:
 
   #region GA.On-Functions
   def on_start(self, ga_instance):
-      self.logger.info("Starting GA search")
+      self.log.info("Starting GA search")
 
   def on_fitness(self, ga_instance, population_fitness):
-      self.logger.info("Computed fitness")
+      self.log.info("Computed fitness")
 
   def on_parents(self, ga_instance, selected_parents):
-      self.logger.info("Selected parents")
+      self.log.info("Selected parents")
 
   def on_crossover(self, ga_instance, offspring_crossover):
-      self.logger.info("Performed crossovers")
+      self.log.info("Performed crossovers")
 
   def on_mutation(self, ga_instance, offspring_mutation):
-      self.logger.info("Mutated")
+      self.log.info("Mutated")
 
   def on_stop(self, ga_instance, last_population_fitness):
-      self.logger.info("Ending GA search")
+      self.log.info("Ending GA search")
       
   def on_generation(self, ga_instance:pygad.GA):
-      self.logger.info(ga_instance.generations_completed)
-      self.logger.info(ga_instance.best_solution()[1])
-      self.logger.debug(ga_instance.population)
+      self.log.info(ga_instance.generations_completed)
+      self.log.info(ga_instance.best_solution()[1])
+      self.log.debug(ga_instance.population)
   #endregion GA.On-Functions
 #endregion GA Class

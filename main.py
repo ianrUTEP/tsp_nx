@@ -9,7 +9,7 @@ if __name__ == "__main__":
   parser = argparse.ArgumentParser()
   parser.add_argument('json_filepath', type=str)
   parser.add_argument('solution_out', type=str)
-  parser.add_argument('log_file', type=str)
+  # parser.add_argument('log_file', type=str)
   parser.add_argument('log_file_level', type=str)
   parser.add_argument('console_level', type=str)
   parser.add_argument('-s', '--solve', default=False, action='store_true')
@@ -17,12 +17,13 @@ if __name__ == "__main__":
   
   json_filepath = args.json_filepath
   solution_filepath = args.solution_out
-  log_file = args.log_file
+  # log_file = args.log_file
   file_level_str = args.log_file_level
   console_level_str = args.console_level
   solve_graphs = args.solve
   
-  logger = jl.create_logger(log_file, file_level_str, console_level_str)
+  # logger = jl.create_logger(log_file, file_level_str, console_level_str)
+  jl.LogFileMaker(file_level_str,console_level_str)
   
   with open('html_settings.json') as settings_file:
     html_set = json.load(settings_file)
@@ -34,7 +35,7 @@ if __name__ == "__main__":
     jl.save_solutions(solution_list, solution_filepath)
     
     
-    # positions = [graph.nodes.data('pos') for graph in graph_list]
+  # positions = [graph.nodes.data('pos') for graph in graph_list]
   # weights = [graph.edges.data('weight') for graph in graph_list]
   # plt.figure(figsize=(8,6))
   # for graph in graph_list:
