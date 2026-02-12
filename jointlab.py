@@ -135,7 +135,7 @@ def cycle_to_path(sol_list:list, graph_list:list)->list:
 #endregion Sol.Greedy
 
 #region Sol.DFS
-def solve_graphs_multdfs(graph_list, n_dfs:int = 1, use_first:bool = True)->list:
+def solve_multdfs(graph_list, n_dfs:int = 1, use_first:bool = True)->list:
   dfs_sols = []
   for i, graph in enumerate(graph_list):
     graph_sols = []
@@ -145,7 +145,7 @@ def solve_graphs_multdfs(graph_list, n_dfs:int = 1, use_first:bool = True)->list
       sources = random.sample(sorted(nx.nodes(graph)), n_dfs)
     for j, source in enumerate(sources):
       print("graph", i, "sol", j)
-      dfs = DDFS(graph, source, i, )
+      dfs = DDFS(graph, int(source), i)
       graph_sols.append(dfs.search())
     dfs_sols.append(graph_sols)
   return dfs_sols
