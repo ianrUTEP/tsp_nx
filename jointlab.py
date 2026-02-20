@@ -145,8 +145,9 @@ def solve_multdfs(graph_list, n_dfs:int = 1, use_first:bool = True)->list:
       sources = random.sample(sorted(nx.nodes(graph)), n_dfs)
     for j, source in enumerate(sources):
       print("graph", i, "sol", j)
-      dfs = DDFS(graph, int(source), i)
+      dfs = DDFS(graph, int(source), i, j)
       graph_sols.append(dfs.search())
+      dfs.close_log()
     dfs_sols.append(graph_sols)
   return dfs_sols
 #endregion Sol.DFS
@@ -281,14 +282,15 @@ class DDFS:
   def __init__(self, graph:nx.Graph, 
               start_node:int = 0,
               graph_num:int=0,
+              search_num:int=0,
               logger=None):
-    self.log:logging.Logger = logger if logger is not None else LogFileMaker.create_logger("/".join(["./logs","_".join([datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),"graph",str(graph_num),"ddfs.txt"])])) 
+    self.log:logging.Logger = logger if logger is not None else LogFileMaker.create_logger("/".join(["./logs","_".join([datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),"g",str(graph_num),"s",str(search_num),"ddfs.txt"])])) 
     self.g:nx.Graph = graph #graph object
     self.n_count:int = len(self.g.nodes())
     self.start = start_node
     self.setup()
   
-  def setup(self, ):
+  def setup(self):
     self.in_path:set = set()  #nodes existing in the path
     try:
       inital_edges = self.get_edges_from_node(self.start) #get the edges from the start node
@@ -316,7 +318,7 @@ class DDFS:
       new_edges.append((v, data['weight']))
     #sort the new edges based on their weight
     new_edges.sort(key=lambda e: e[1])
-    self.log.debug("New edge collection sorted by weight: %s", str(new_edges))
+    # self.log.debug("New edge collection sorted by weight: %s", str(new_edges))
     #TODO: consider implementing a limit to the number of edges returned to prevent the search tree from growing too large
     #This would allow me to do the original plan and not remove edges when consumed so that they remain when backtracked
     #However, this could lead to cases where all of the cheapest edges are to already explored nodes and the DFS fails
@@ -331,11 +333,11 @@ class DDFS:
     if branch == 0:
       self.branches[0] = edges + self.branches[0]
       self.path = [new_node] + self.path
-      self.log.debug("branches[0]: %s", str(self.branches[0]))
+      # self.log.debug("branches[0]: %s", str(self.branches[0]))
     else:
       self.branches[1] = edges + self.branches[1]
       self.path.append(new_node)
-      self.log.debug("branches[1]: %s", str(self.branches[1]))
+      # self.log.debug("branches[1]: %s", str(self.branches[1]))
     self.log.debug("path: %s", str(self.path))
 
   # removes front nodes from branches until the frontmost is not already in the path
