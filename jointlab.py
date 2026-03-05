@@ -9,6 +9,7 @@ import seaborn as sns
 import matplotlib.colors as mcolors
 import pygad
 import logging
+import time
 
 #region Load Graphs
 def reset_graph_list(json_filepath):
@@ -345,11 +346,13 @@ class DDFS:
   
   # perform other functions automatically until the search is complete
   def search(self)->list:
+    start = time.perf_counter()
     while len(self.path) < self.n_count:
       self.clear_dead_limbs()
       next_branch = self.select_branch()
       next_node, next_weight = self.branches[next_branch].pop(0)  #grab the front of the chosen branch
       self.add_edges_to_branch(next_branch, next_node)
+    self.log.info("Total search time %.4f", time.perf_counter()-start)
     return self.path
   
   def reset(self):
@@ -453,6 +456,7 @@ class GraphGA:
     return np.array(offspring)
   #endregion GA.Crossovers
   
+  #region GA.Main
   def reset_ga(self, n_gens: int=5, n_par_mate: int=120,
         parent_keep: int=0, n_elites: int=2, #if n_elites != 0, then parent_keep is ignored in GA
         mut:str='inversion', mut_prob:float=0.4,
@@ -506,11 +510,12 @@ class GraphGA:
   
   def give_solution(self):
     solution, solution_fitness, solution_idx = self.ga.best_solution()
-    print(f"Parameters of the best solution : {solution}")
-    print(f"Fitness value of the best solution = {solution_fitness}")
-    print(f"Index of the best solution : {solution_idx}")
-    print(f"Weight of the solution = {nx.path_weight(self.graph, solution, 'weight')}")
+    self.log.debug(f"Parameters of the best solution : {solution}")
+    self.log.info(f"Fitness value of the best solution = {solution_fitness}")
+    self.log.info(f"Index of the best solution : {solution_idx}")
+    self.log.info(f"Weight of the solution = {nx.path_weight(self.graph, solution, 'weight')}")
     return self.ga.best_solution()
+  #endregion GA.Main
 
   #region GA.On-Functions
   def on_start(self, ga_instance):
@@ -533,7 +538,7 @@ class GraphGA:
       
   def on_generation(self, ga_instance:pygad.GA):
       self.log.info(ga_instance.generations_completed)
-      self.log.info(ga_instance.best_solution()[1])
+      self.log.info(ga_instance.best_solution()[1]) #fitness
       self.log.debug(ga_instance.population)
   #endregion GA.On-Functions
 #endregion GA Class
