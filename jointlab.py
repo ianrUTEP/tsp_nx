@@ -26,15 +26,26 @@ def load_graphs_json(file_path: str, graph_list: list) -> list:
     for row in df.itertuples(index=False):
       # each row in dataframe represents a graph, turn into graph object
       graph_list.append(complete_graph_from_row(row))
+      if hasattr(row, 'compnodes'):
+        graph_list.append(compressed_complete_from_row(row))
   return graph_list
 
 def complete_graph_from_row(row: tuple) -> nx.Graph:
-  G = nx.Graph()
+  G = nx.Graph(compressed=False)
   for node_id, node_data in getattr(row, 'nodes').items():
     G.add_node(int(node_id), pos=(node_data['pos'][0], node_data['pos'][1]), group=node_data['streamline'][0]) # streamline number becomes group
-  for edge_str, edge_data,  in getattr(row, 'edges').items():
+  for edge_str, edge_data, in getattr(row, 'edges').items():
     u_str, v_str = edge_str.split(',')
     G.add_edge(int(u_str), int(v_str), length=edge_data['len'], alignment=edge_data['align']) #no weight given yet
+  return G
+
+def compressed_complete_from_row(row: tuple) -> nx.Graph:
+  G = nx.Graph(compressed=True)
+  for node_id, node_data in getattr(row, 'compnodes').items():
+    G.add_node(int(node_id), pos=(node_data['pos'][0], node_data['pos'][1]), group=node_data['streamline'][0]) # streamline number becomes group
+  for edge_str, edge_data, in getattr(row, 'compedges').items():
+    u_str, v_str = edge_str.split(',')
+    G.add_edge(int(u_str), int(v_str), lengths=edge_data['l'], alignments=edge_data['a'], nodes=edge_data['n'])
   return G
 #endregion Load Graphs
 
@@ -237,10 +248,22 @@ class LogFileMaker:
 #endregion Outputs
 
 #region Modify Graphs
-def add_weights(graph_list, travel_threshold:float=0.8):
+def add_weights(graph_list, travel_threshold:float=0.8, compression_fact:float=0.3):
   for graph in graph_list:
+    if graph.graph['compressed'] == False:
       for u, v, data in graph.edges(data=True):
         data['weight'] = compute_weight(data['alignment'], data['length'], travel_threshold)
+        # if data['alignment'] != 0:
+        #   data['weight'] = data['alignment'] + (data['length'] / travel_threshold)**2# 1 to 2 + d(0,1] = d[2,3] because 1 added already
+        # else:
+        #   data['weight'] = 3 + (data['length'] / travel_threshold)**2 # 2 + length, minimum 2 + 2*EW 
+    if graph.graph['compressed'] == True:
+      for u, v, data in graph.edges(data=True):
+        subweights = 0
+        n_edges = len(data['nodes'])-1
+        for n in range(n_edges):
+          subweights += (compute_weight(data['alignments'][n], data['lengths'][n], travel_threshold))
+        data['weight'] = subweights / n_edges * compression_fact
         # if data['alignment'] != 0:
         #   data['weight'] = data['alignment'] + (data['length'] / travel_threshold)**2# 1 to 2 + d(0,1] = d[2,3] because 1 added already
         # else:
@@ -252,6 +275,21 @@ def compute_weight(alignment, length, travel_thresh):
   else:
     return 3 + (length / travel_thresh)**2
   
+def decompress(graph_list, solution_list):
+  uncompressed_graphs = []
+  decompressed_sols = []
+  for i, g in enumerate(graph_list):
+    if g.graph['compressed'] == True:
+      uncompressed_graphs.append(graph_list[i-1]) #graph comes before is the uncompressed version
+      comp_sol = solution_list[i] #take the solution that matches this compressed one
+      full_sol = [comp_sol[0]]  #first node
+      for u, v in [comp_sol[n:n+2] for n in range(0, len(comp_sol)-1)]:
+        nodes:list = g[u][v]['nodes'] #get the nodes each edge represents
+        if u > v:
+          nodes.reverse() #node representation always cannonical order, may need reversed to reflect edge direction
+        full_sol += nodes[1:] #drop the first one
+      decompressed_sols.append(full_sol)
+  return (uncompressed_graphs, decompressed_sols)
 
 def get_attribute_extremes(graph: nx.Graph, attribute: str):
   attrList = nx.get_edge_attributes(graph, attribute) #gets iterable list of specified attribute
