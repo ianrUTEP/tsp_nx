@@ -39,14 +39,14 @@ def complete_graph_from_row(row: tuple) -> nx.Graph:
 #endregion Load Graphs
 
 #region Visualization
-def make_solution_html(graph_list, canvas_height, sol_list: list, vis_opt_dict: dict = {}, color_scale_attr: str = 'weight'):
+def make_solution_html(graph_list, sol_list: list, canvas_height, vis_opt_dict: dict = {}, color_scale_attr: str = 'weight'):
   timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
   for i, graph in enumerate(graph_list):
     print("making solution copy of graph", i)
     vis_graph: nx.Graph = nx.create_empty_copy(graph)
     edges = [(sol_list[i][j], sol_list[i][j+1]) for j in range(len(sol_list[i])-1)]
     for u,v in edges:
-      vis_graph.add_edge(u, v, weight=graph.edges[u,v]['weight'], length=graph.edges[u,v]['length'], alignment=graph.edges[u,v]['alignment'])
+      vis_graph.add_edge(u, v, weight=graph.edges[u,v]['weight'])#, length=graph.edges[u,v]['length'], alignment=graph.edges[u,v]['alignment'])
     print("generating graphvis data for graph", i)
     coords = np.array(list(nx.get_node_attributes(vis_graph, 'pos').values()))
     x_coords = coords[:, 0]
@@ -239,11 +239,19 @@ class LogFileMaker:
 #region Modify Graphs
 def add_weights(graph_list, travel_threshold:float=0.8):
   for graph in graph_list:
-    for u, v, data in graph.edges(data=True):
-      if data['alignment'] != 0:
-        data['weight'] = data['alignment'] + (data['length'] / travel_threshold)**2# 1 to 2 + d(0,1] = d[2,3] because 1 added already
-      else:
-        data['weight'] = 3 + (data['length'] / travel_threshold)**2 # 2 + length, minimum 2 + 2*EW 
+      for u, v, data in graph.edges(data=True):
+        data['weight'] = compute_weight(data['alignment'], data['length'], travel_threshold)
+        # if data['alignment'] != 0:
+        #   data['weight'] = data['alignment'] + (data['length'] / travel_threshold)**2# 1 to 2 + d(0,1] = d[2,3] because 1 added already
+        # else:
+        #   data['weight'] = 3 + (data['length'] / travel_threshold)**2 # 2 + length, minimum 2 + 2*EW 
+
+def compute_weight(alignment, length, travel_thresh):
+  if alignment != 0:
+    return alignment + (length / travel_thresh)**2
+  else:
+    return 3 + (length / travel_thresh)**2
+  
 
 def get_attribute_extremes(graph: nx.Graph, attribute: str):
   attrList = nx.get_edge_attributes(graph, attribute) #gets iterable list of specified attribute
