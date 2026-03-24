@@ -261,9 +261,12 @@ def add_weights(graph_list, travel_threshold:float=0.8, compression_fact:float=0
       for u, v, data in graph.edges(data=True):
         subweights = 0
         n_edges = len(data['nodes'])-1
-        for n in range(n_edges):
-          subweights += (compute_weight(data['alignments'][n], data['lengths'][n], travel_threshold))
-        data['weight'] = subweights / n_edges * compression_fact
+        if n_edges == 1:
+          data['weight'] = compute_weight(data['alignments'][0], data['lengths'][0], travel_threshold)
+        else:
+          for n in range(n_edges):
+            subweights += (compute_weight(data['alignments'][n], data['lengths'][n], travel_threshold))
+          data['weight'] = (subweights / n_edges) * compression_fact
         # if data['alignment'] != 0:
         #   data['weight'] = data['alignment'] + (data['length'] / travel_threshold)**2# 1 to 2 + d(0,1] = d[2,3] because 1 added already
         # else:
