@@ -164,6 +164,18 @@ def select_best_sol(graph_list:list, solution_list:list, cost_attr:str="weight")
     best_sols.append(solution_list[i][best_j])
   return best_sols
 
+def get_attribute_extremes(graph: nx.Graph, attribute: str):
+  attrList = nx.get_edge_attributes(graph, attribute) #gets iterable list of specified attribute
+  #assume extremes
+  minAtt = float('inf')
+  maxAtt = float('-inf')
+  for edge in attrList:
+    if attrList[edge] > maxAtt:
+      maxAtt = attrList[edge]
+    if attrList[edge] < minAtt:
+      minAtt = attrList[edge]
+  return (minAtt, maxAtt)
+
 #region Out.LogFileMaker
 class LogFileMaker:
   #static "private" values shared between the class as a default for creating logs
@@ -295,17 +307,6 @@ def decompress(graph_list, solution_list):
       decompressed_sols.append(full_sol)
   return (uncompressed_graphs, decompressed_sols)
 
-def get_attribute_extremes(graph: nx.Graph, attribute: str):
-  attrList = nx.get_edge_attributes(graph, attribute) #gets iterable list of specified attribute
-  #assume extremes
-  minAtt = float('inf')
-  maxAtt = float('-inf')
-  for edge in attrList:
-    if attrList[edge] > maxAtt:
-      maxAtt = attrList[edge]
-    if attrList[edge] < minAtt:
-      minAtt = attrList[edge]
-  return (minAtt, maxAtt)
 #endregion Modify Graphs
 
 #region DDFS Class
