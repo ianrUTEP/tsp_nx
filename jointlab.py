@@ -289,8 +289,9 @@ def decompress(graph_list, solution_list):
       for u, v in [comp_sol[n:n+2] for n in range(0, len(comp_sol)-1)]:
         nodes:list = g[u][v]['nodes'] #get the nodes each edge represents
         if u > v:
-          nodes.reverse() #node representation always cannonical order, may need reversed to reflect edge direction
-        full_sol += nodes[1:] #drop the first one
+          full_sol += reversed(nodes[:-1]) #node representation always cannonical order, may need reversed to reflect edge direction and drop the last one
+        else:
+          full_sol += nodes[1:] #drop the first one
       decompressed_sols.append(full_sol)
   return (uncompressed_graphs, decompressed_sols)
 
