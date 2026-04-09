@@ -344,6 +344,87 @@ def decompress(graph_list, solution_list):
       decompressed_sols.append(full_sol)
   return (uncompressed_graphs, decompressed_sols)
 
+def complete_missing_nodes(graph: nx.Graph, solution: list) -> list:
+  log = LogFileMaker.create_logger("/".join(["./logs","_".join([datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),"completer.log"])])) 
+  missing_nodes = graph.nodes() - set(solution)
+  new_sol = solution.copy()
+  for n in missing_nodes: 
+    log.info("Adding node %d", n)
+    greedy_pos = 0
+    greedy_cost = float('inf')
+    for i in range(len(new_sol)+1): #try every index from 0 (prepend) to length (append), add 1 because range end exclusive
+      test_path = new_sol.copy()
+      test_path.insert(i,n)
+      if (nx.path_weight(graph, test_path, 'weight') < greedy_cost):
+        greedy_pos = i
+        greedy_cost = nx.path_weight(graph, test_path, 'weight')
+        log.debug("Minweight updated to %f at %d", greedy_cost, i)
+    log.debug("Selected position %d", greedy_pos)
+    new_sol.insert(greedy_pos, n)
+  for handler in log.handlers:
+    log.removeHandler(handler)
+  return new_sol
+
+def missing_nodes_zag(graph: nx.Graph, solution: list) -> list:
+  new_sol = solution.copy()
+  log = LogFileMaker.create_logger("/".join(["./logs","_".join([datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),"zag.log"])]))
+  # set of nodes missing to add
+  missing_nodes = graph.nodes() - set(solution)
+  # keeps track of how many new edges are added to existing nodes
+  new_connection_counts = dict.fromkeys(solution, 0)
+  # keeps track of where the nodes should end up going
+  connection_inserts = dict.fromkeys(missing_nodes, [0,0])
+  # determine missing node insertions
+  for n in missing_nodes:
+    log.debug("Considering missing node %d", n)
+    # get edges sorted by weight (consider cheapest options first)
+    sorted_edges = sorted(graph.edges(n, data=True), key=lambda x: x[2].get('weight', float('inf')))
+    for edge in sorted_edges:
+      # a connection for this node has been established, can break this loop
+      if connection_inserts.get(n, [0,0]) != [0,0]:
+        break
+      log.debug("Considering edge to %d", edge[1])
+      # check if the edge destination (edges from graph are given as source, dest so this always works) is in the solved set and isn't overcrowded
+      if edge[1] in new_connection_counts and new_connection_counts.get(edge[1],2) < 2:
+        # don't allow this connection if the destination is right next to the new node (streamline turnarounds mainly)
+        if edge[1] == n + 1 or edge[1] == n - 1:
+          log.debug("This connection is at a streamline turnaround and will not be considered")
+          continue
+        # check the nodes immediately before and after the possible connection in the solution
+        idx = solution.index(edge[1])
+        neighbors = [solution[idx-1] if idx-1>= 0 else None, solution[idx+1] if idx+1 < len(solution) else None]
+        neighbors.sort(key=lambda x: graph[n][x]['weight'])
+        # sort the neighbors, again greedily
+        log.debug("Attempting to connect %d to %d using neighbors %d and %d", n, edge[1], neighbors[0], neighbors[1])
+        # check each neighbor
+        for neighbor in neighbors:
+          # start/end of solution exception
+          if neighbor is None:
+            continue
+          # neighbor isn't overcrowded and is part of the solution
+          if neighbor in new_connection_counts and new_connection_counts.get(neighbor,2) < 2:
+            log.debug("Will insert %d between %d and %d", n, edge[1], neighbor)
+            # save where to put it
+            connection_inserts.update({n:[edge[1],neighbor]})
+            # CURRENTLY DISABLED - update overcrowding information
+            # new_connection_counts[edge[1]] = new_connection_counts[edge[1]] + 1
+            # new_connection_counts[neighbor] = new_connection_counts[neighbor] + 1
+            # stop searching through neighbors
+            break
+      else:
+        log.debug("Not a solved node or overcrowded")
+  # make the instruction set for reversals
+  insertions = []
+  for new_node, between in connection_inserts.items():
+    # keep the max index
+    insertions.append([new_node, max(solution.index(between[0]),solution.index(between[1]))])
+  # reverse sort by max index
+  insertions.sort(key=lambda x:x[1], reverse=True)
+  for node, idx in insertions:
+    new_sol.insert(idx, node)
+  for handler in log.handlers:
+    log.removeHandler(handler)
+  return new_sol
 #endregion Modify Graphs
 
 #region DDFS Class
