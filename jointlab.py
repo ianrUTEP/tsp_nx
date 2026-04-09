@@ -33,7 +33,13 @@ def load_graphs_json(file_path: str, graph_list: list) -> list:
 def complete_graph_from_row(row: tuple) -> nx.Graph:
   G = nx.Graph(compressed=False)
   for node_id, node_data in getattr(row, 'nodes').items():
-    G.add_node(int(node_id), pos=(node_data['pos'][0], node_data['pos'][1]), group=node_data['streamline'][0]) # streamline number becomes group
+    G.add_node(int(node_id), 
+              pos=(node_data['pos'][0], node_data['pos'][1]), 
+              group=node_data['streamline'][0],     # streamline number becomes group
+              groupidx=node_data['streamline'][1],
+              pstress=node_data['pStressV'],
+              comps=node_data['CompV'],
+              internal=bool(node_data['partMember'])) # may have to change partmember behavior to "node identifier" in future and not bool
   for edge_str, edge_data, in getattr(row, 'edges').items():
     u_str, v_str = edge_str.split(',')
     G.add_edge(int(u_str), int(v_str), length=edge_data['len'], alignment=edge_data['align']) #no weight given yet
@@ -42,7 +48,13 @@ def complete_graph_from_row(row: tuple) -> nx.Graph:
 def compressed_complete_from_row(row: tuple) -> nx.Graph:
   G = nx.Graph(compressed=True)
   for node_id, node_data in getattr(row, 'compnodes').items():
-    G.add_node(int(node_id), pos=(node_data['pos'][0], node_data['pos'][1]), group=node_data['streamline'][0]) # streamline number becomes group
+    G.add_node(int(node_id), 
+              pos=(node_data['pos'][0], node_data['pos'][1]), 
+              group=node_data['streamline'][0],     # streamline number becomes group
+              groupidx=node_data['streamline'][1],
+              pstress=node_data['pStressV'],
+              comps=node_data['CompV'],
+              internal=bool(node_data['partMember'])) # may have to change partmember behavior to "node identifier" in future and not bool
   for edge_str, edge_data, in getattr(row, 'compedges').items():
     u_str, v_str = edge_str.split(',')
     G.add_edge(int(u_str), int(v_str), lengths=edge_data['l'], alignments=edge_data['a'], nodes=edge_data['n'])
@@ -264,7 +276,7 @@ def add_weights(graph_list, travel_threshold:float=0.8, compression_fact:float=0
   for graph in graph_list:
     if graph.graph['compressed'] == False:
       for u, v, data in graph.edges(data=True):
-        data['weight'] = compute_weight(data['alignment'], data['length'], travel_threshold)
+        data['weight'] = compute_weight(data['alignment'], data['length'], travel_threshold, graph.nodes[u], graph.nodes[v])
         # if data['alignment'] != 0:
         #   data['weight'] = data['alignment'] + (data['length'] / travel_threshold)**2# 1 to 2 + d(0,1] = d[2,3] because 1 added already
         # else:
@@ -274,22 +286,47 @@ def add_weights(graph_list, travel_threshold:float=0.8, compression_fact:float=0
         subweights = 0
         n_edges = len(data['nodes'])-1
         if n_edges == 1:
-          data['weight'] = compute_weight(data['alignments'][0], data['lengths'][0], travel_threshold)
+          data['weight'] = compute_weight(data['alignments'][0], data['lengths'][0], travel_threshold, graph.nodes[u], graph.nodes[v])
         else:
           for n in range(n_edges):
-            subweights += (compute_weight(data['alignments'][n], data['lengths'][n], travel_threshold))
+            subweights += (compute_weight(data['alignments'][n], data['lengths'][n], travel_threshold, graph.nodes[u], graph.nodes[v]))
           data['weight'] = (subweights / n_edges) * compression_fact
         # if data['alignment'] != 0:
         #   data['weight'] = data['alignment'] + (data['length'] / travel_threshold)**2# 1 to 2 + d(0,1] = d[2,3] because 1 added already
         # else:
         #   data['weight'] = 3 + (data['length'] / travel_threshold)**2 # 2 + length, minimum 2 + 2*EW 
 
-def compute_weight(alignment, length, travel_thresh):
-  if alignment != 0:
-    return alignment + (length / travel_thresh)**2
-  else:
-    return 3 + (length / travel_thresh)**2
-  
+def compute_weight(alignment, length, travel_thresh, u, v):
+  if (u['internal'] == v['internal'] and u['internal'] == True): #internal->internal
+    if alignment == 0:
+      return 3 + length_factor(length, travel_thresh)**2 + composition_factor(u['comps'], v['comps'])
+    else:
+      return alignment + length_factor(length, travel_thresh)**2 + composition_factor(u['comps'], v['comps'])
+  elif (u['internal'] == v['internal'] and u['internal'] == False): #perim->perim
+    if alignment == 0:
+      return 2 + (length_factor(length, travel_thresh)/2) + composition_factor(u['comps'], v['comps'])
+    else:
+      return alignment + (length_factor(length, travel_thresh)/2) + composition_factor(u['comps'], v['comps'])
+  else: # intenal->perim
+    # currently same as internal->internal
+    if alignment == 0:
+      return 3 + length_factor(length, travel_thresh)**2 + composition_factor(u['comps'], v['comps'])
+    else:
+      return alignment + length_factor(length, travel_thresh)**2 + composition_factor(u['comps'], v['comps'])
+  # if alignment != 0:
+  #   return alignment + (length / travel_thresh)**2
+  # else:
+  #   return 3 + (length / travel_thresh)**2
+
+def length_factor(len, thresh):
+  return len/thresh
+
+def composition_factor(c1:list, c2:list):
+  total = 0
+  for i in range(len(c1)):
+    total += ((c2[i]-c1[i])**2)
+  return total
+
 def decompress(graph_list, solution_list):
   uncompressed_graphs = []
   decompressed_sols = []
