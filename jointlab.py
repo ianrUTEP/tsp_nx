@@ -188,6 +188,9 @@ def get_attribute_extremes(graph: nx.Graph, attribute: str):
       minAtt = attrList[edge]
   return (minAtt, maxAtt)
 
+def comps_over_sol_len(graph: nx.Graph, solution) -> list:
+  return []
+
 #region Out.LogFileMaker
 class LogFileMaker:
   #static "private" values shared between the class as a default for creating logs
