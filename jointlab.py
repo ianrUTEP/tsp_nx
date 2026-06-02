@@ -245,14 +245,15 @@ class LogFileMaker:
   #static "private" values shared between the class as a default for creating logs
   global_lf_lev = logging.DEBUG
   global_c_lev = logging.INFO
+  global_base_path = ""
   
   #create and set the global variables. Creating a new one is the only way to change it
-  def __init__(self, logfile_level:str, console_level:str):
+  def __init__(self, logfile_level:str, console_level:str, base_dir:str):
     #set a global level at initalization of class
-    self.set_globals(logfile_level,console_level)
+    self.set_globals(logfile_level, console_level, base_dir)
   
   @classmethod
-  def set_globals(cls, new_g_lf_lev, new_g_c_lev):
+  def set_globals(cls, new_g_lf_lev:str, new_g_c_lev:str, new_base_path:str):
     match new_g_lf_lev:
       case 'debug':
         cls.global_lf_lev = logging.DEBUG #filters to debug and above, not recommended for console
@@ -271,6 +272,14 @@ class LogFileMaker:
         cls.global_c_lev = None
       case _:
         cls.global_c_lev = None
+    try: 
+      if not path.exists(new_base_path):
+         makedirs(new_base_path)
+      cls.global_base_path = new_base_path
+    except OSError as exc:
+       print('Error with logfile path:', str(exc))
+       sys.exit(1)
+
   
   #Uses the globals and the input values to return levels
   @classmethod
@@ -302,13 +311,15 @@ class LogFileMaker:
   #Creates a new logger
   @classmethod
   def create_logger(cls, logfile_name:str, logfile_level:str='global', console_level:str='global')-> logging.Logger:
-    print("Creating logger:", logfile_name, "with file and console:", logfile_level, console_level)
+    print("Creating logger:", logfile_name, "in folder", cls.global_base_path, "with file and console:", logfile_level, console_level)
     #set the levels for the class, but not the global status
     lf_lev, c_lev = cls.set_levels(logfile_level,console_level)
-    logger = logging.getLogger(logfile_name)
+    #location for this logger
+    log_full_path = path.normpath(path.join(cls.global_base_path,logfile_name))
+    logger = logging.getLogger(log_full_path)
     logger.setLevel(logging.DEBUG)
     if lf_lev is not None:
-      file_handler = logging.FileHandler(logfile_name,'a+','utf-8')
+      file_handler = logging.FileHandler(log_full_path,'a+','utf-8')
       file_handler.setLevel(lf_lev)
       file_format = logging.Formatter('%(asctime)s %(levelname)s: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
       file_handler.setFormatter(file_format)
@@ -397,7 +408,7 @@ def decompress(graph_list, solution_list):
   return (uncompressed_graphs, decompressed_sols)
 
 def complete_missing_nodes(graph: nx.Graph, solution: list) -> list:
-  log = LogFileMaker.create_logger("/".join(["./logs","_".join([datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),"completer.log"])])) 
+  log = LogFileMaker.create_logger("_".join([datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),"completer.log"]))
   missing_nodes = graph.nodes() - set(solution)
   new_sol = solution.copy()
   for n in missing_nodes: 
@@ -419,7 +430,7 @@ def complete_missing_nodes(graph: nx.Graph, solution: list) -> list:
 
 def missing_nodes_zag(graph: nx.Graph, solution: list) -> list:
   new_sol = solution.copy()
-  log = LogFileMaker.create_logger("/".join(["./logs","_".join([datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),"zag.log"])]))
+  log = LogFileMaker.create_logger("_".join([datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),str(graph.graph['number']),"zag.log"]))
   # set of nodes missing to add
   missing_nodes = graph.nodes() - set(solution)
   # keeps track of how many new edges are added to existing nodes
@@ -516,7 +527,7 @@ class DDFS:
               graph_num:int=0,
               search_num:int=0,
               logger=None):
-    self.log:logging.Logger = logger if logger is not None else LogFileMaker.create_logger("/".join(["./logs","_".join([datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),"g",str(graph_num),"s",str(search_num),"ddfs.txt"])])) 
+    self.log:logging.Logger = logger if logger is not None else LogFileMaker.create_logger("_".join([datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),"g",str(graph_num),"s",str(search_num),"ddfs.txt"])) 
     self.g:nx.Graph = graph #graph object
     self.n_count:int = len(self.g.nodes())
     self.start = start_node
@@ -617,7 +628,7 @@ class GraphGA:
     self.graph = graph
     self.path_list = path_list
     self.gene_range = sorted(nx.nodes(graph)) #range(1, nx.number_of_nodes(self.graph) + 1)
-    self.log:logging.Logger = logger if logger is not None else LogFileMaker.create_logger("/".join(["./logs","_".join([datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),"graph",str(graph_num),"ga.txt"])]))
+    self.log:logging.Logger = logger if logger is not None else LogFileMaker.create_logger("_".join([datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),"graph",str(graph_num),"ga.txt"]))
 
   def close_log(self):
     for handler in self.log.handlers:
