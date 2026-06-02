@@ -1,3 +1,4 @@
+import copy
 import networkx as nx
 import pandas as pd
 import numpy as np
@@ -10,8 +11,19 @@ import matplotlib.colors as mcolors
 import pygad
 import logging
 import time
+from os import path, makedirs
+import sys
+from math import dist
+from wolframclient.evaluation import WolframLanguageSession as wls
+from wolframclient.language import wl, wlexpr
 
 #region Load Graphs
+def read_sol_list(json_filepath):
+  with open(json_filepath, 'r') as json_file:
+    new_sol_list = json.load(json_file)
+  return(new_sol_list)
+  
+
 def reset_graph_list(json_filepath):
   new_graph_list = []
   print("Attempting to load the graphs")
@@ -23,15 +35,15 @@ def load_graphs_json(file_path: str, graph_list: list) -> list:
   with open(file_path) as json_file:
     # turn into dataframe
     df = pd.read_json(json_file)
-    for row in df.itertuples(index=False):
+    for i, row in enumerate(df.itertuples(index=False)):
       # each row in dataframe represents a graph, turn into graph object
-      graph_list.append(complete_graph_from_row(row))
+      graph_list.append(complete_graph_from_row(row, i))
       if hasattr(row, 'compnodes'):
-        graph_list.append(compressed_complete_from_row(row))
+        graph_list.append(compressed_complete_from_row(row, i))
   return graph_list
 
-def complete_graph_from_row(row: tuple) -> nx.Graph:
-  G = nx.Graph(compressed=False)
+def complete_graph_from_row(row: tuple, num: int) -> nx.Graph:
+  G = nx.Graph(compressed=False, number=num)
   for node_id, node_data in getattr(row, 'nodes').items():
     G.add_node(int(node_id), 
               pos=(node_data['pos'][0], node_data['pos'][1]), 
@@ -45,8 +57,8 @@ def complete_graph_from_row(row: tuple) -> nx.Graph:
     G.add_edge(int(u_str), int(v_str), length=edge_data['len'], alignment=edge_data['align']) #no weight given yet
   return G
 
-def compressed_complete_from_row(row: tuple) -> nx.Graph:
-  G = nx.Graph(compressed=True)
+def compressed_complete_from_row(row: tuple, num: int) -> nx.Graph:
+  G = nx.Graph(compressed=True, number=num)
   for node_id, node_data in getattr(row, 'compnodes').items():
     G.add_node(int(node_id), 
               pos=(node_data['pos'][0], node_data['pos'][1]), 
@@ -108,7 +120,15 @@ def make_solution_html(graph_list, sol_list: list, canvas_height, vis_opt_dict: 
     net.save_graph(name='/'.join(['./graphvisuals','.'.join(['_'.join([timestamp, 'graph', str(i)]),'html'])]))
     
 def get_color_hex_in_range(value, colormap: mcolors.ListedColormap, normalizer: mcolors.Normalize):
-  return mcolors.to_hex(colormap(normalizer(value)))
+  # print(normalizer.vmax)
+  # print(normalizer.vmin)
+  try:
+    color = mcolors.to_hex(colormap(normalizer(value+1)))
+  except ValueError:
+    color = mcolors.to_hex(colormap(0.5))
+    # print(value)
+  # print(color)
+  return color
 #endregion Visualization
       
 #region Solvers
@@ -327,7 +347,7 @@ def length_factor(len, thresh):
 def composition_factor(c1:list, c2:list):
   total = 0
   for i in range(len(c1)):
-    total += ((c2[i]-c1[i])**2)
+    total += abs((abs(c2[i])-abs(c1[i])))
   return total
 
 def decompress(graph_list, solution_list):
@@ -378,6 +398,7 @@ def missing_nodes_zag(graph: nx.Graph, solution: list) -> list:
   # keeps track of where the nodes should end up going
   connection_inserts = dict.fromkeys(missing_nodes, [0,0])
   # determine missing node insertions
+  log.debug("Length of missing nodes: %d", len(missing_nodes))
   for n in missing_nodes:
     log.debug("Considering missing node %d", n)
     # get edges sorted by weight (consider cheapest options first)
@@ -428,6 +449,35 @@ def missing_nodes_zag(graph: nx.Graph, solution: list) -> list:
   for handler in log.handlers:
     log.removeHandler(handler)
   return new_sol
+
+def reconstruct_ext_path(solution, registry):
+  full_path = []
+  for gene_id in solution:
+    gene = registry[gene_id]
+    if gene['type'] in ['compressed', 'standalone']:
+      full_path.extend(gene['internal_path'])
+    elif gene['type'] == 'new':
+       full_path.append(tuple(gene['start_pos']))
+  return full_path
+
+def integrate_solution_to_graph(src_graph: nx.Graph, full_path):
+  extended_graph:nx.Graph = copy.deepcopy(src_graph)
+  new_node_num = max(extended_graph.nodes)
+  modified_path = []
+  for node in full_path:
+    if isinstance(node, tuple) and not extended_graph.has_node(node):
+        new_node_num += 1
+        extended_graph.add_node(new_node_num, pos=node, internal=False, group=-1)
+        modified_path.append(new_node_num)
+    else:
+       modified_path.append(node)
+  for i in range(len(full_path) - 1):
+    node_a = modified_path[i]
+    node_b = modified_path[i+1]
+    if not extended_graph.has_edge(node_a, node_b):
+       extended_graph.add_edge(node_a,node_b,weight=1)
+  return extended_graph, modified_path
+
 #endregion Modify Graphs
 
 #region DDFS Class
@@ -714,3 +764,802 @@ class GraphGA:
       self.log.debug(ga_instance.population)
   #endregion GA.On-Functions
 #endregion GA Class
+
+class GraphTraversalManager:
+  def __init__(self, nx_graph, hamiltonian_path, new_points, expected_len:float=0.8, comp_weights:list=[1,1,1], fit_len:float=1, fit_comp:float=1, graph_num:int=0, logger=None):
+    self.log:logging.Logger = logger if logger is not None else LogFileMaker.create_logger("_".join([datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),"graph",str(graph_num),"ga.txt"]))
+    self.graph = nx_graph
+    self.original_path = hamiltonian_path
+    self.new_points = new_points
+    self.expected_len = expected_len
+    self.composition_weights = comp_weights
+    self.fitness_len_factor = fit_len
+    self.fitness_comp_factor = fit_comp
+    
+    self.registry = {}
+    self.next_gene_id = 1
+
+    self._build_registry()
+    
+    self.gene_range = sorted(self._get_initial_chromosome())
+
+    self.session = wls(kernel="C:\\Program Files\\Wolfram Research\\Wolfram\\14.3\\WolframKernel.exe")
+    self.session.evaluate(wlexpr('Get["./compModels/CompositionErrorEstimation.wl"]'))
+    self.session.evaluate(wl.CompositionErrorEstimation.InitializeModel("./compModels",28.0156,0.2,0.8))
+
+  def close_log(self):
+    for handler in self.log.handlers:
+      self.log.removeHandler(handler)
+
+  def close_wls(self, graceful:bool=True):
+    if not graceful:
+      self.session.terminate()
+    self.session.stop_future(gracefully=graceful)
+
+  def run_ga(self):
+    self.ga.run()
+
+  def _build_registry(self):
+        """Processes the graph, path, and new points to build the 1D dictionary registry."""
+        current_chunk = []
+        
+        for node in self.original_path:
+            is_natural_external = not self.graph.nodes[node]['internal']
+            current_chunk.append(node)
+            
+            # We only finalize a chunk if we hit a natural external
+            # AND it isn't the very first node of a fresh chunk.
+            if is_natural_external and len(current_chunk) > 1:
+                
+                if len(current_chunk) == 2:
+                    # Pattern: [BoundaryNode, NaturalExternal]
+                    # Example: [E1, E2] OR the [I2, E3] case you described.
+                    # The BoundaryNode stands alone as its own distinct gene.
+                    prev_node = current_chunk[0]
+                    self._add_to_registry('standalone', [prev_node])
+                    
+                    # The current natural external starts the next chunk
+                    current_chunk = [node] 
+                    
+                else:
+                    # Pattern: [BoundaryNode, Internal(s)..., NaturalExternal]
+                    # Example: [E1, I1, E2] OR [I2, I3, E3]
+                    # This is a standard compressed sequence.
+                    self._add_to_registry('compressed', current_chunk)
+                    
+                    # CRITICAL STEP: By completely clearing the chunk, the NEXT node in the path 
+                    # (even if it's internal like I2) will be forced to act as the BoundaryNode 
+                    # for the next sequence. This ensures E2 is consumed only once.
+                    current_chunk = [] 
+
+        # Catch any trailing nodes at the end of the Hamiltonian path
+        # If the path ended exactly on a compressed block, current_chunk is []
+        if len(current_chunk) > 0:
+            if len(current_chunk) == 1:
+                # Ends on a single standalone node
+                self._add_to_registry('standalone', current_chunk)
+            else:
+                # Edge case: If the path ends with [BoundaryNode, Internal(s)...]
+                self._add_to_registry('compressed', current_chunk)
+
+        # 2. Add New External Points to the Registry
+        for point in self.new_points:
+            self.registry[self.next_gene_id] = {
+                'type': 'new',
+                'start_pos': point,
+                'end_pos': point,
+                'start_comp': None, 
+                'end_comp': None,
+                'internal_path': [],
+                'allow_reverse': False
+            }
+            self.next_gene_id += 1
+
+  def _add_to_registry(self, gene_type, path):
+      """Helper to extract node attributes and insert them into the registry."""
+      start_node = path[0]
+      end_node = path[-1]
+      
+      self.registry[self.next_gene_id] = {
+          'type': gene_type,
+          'start_pos': self.graph.nodes[start_node]['pos'],
+          'end_pos': self.graph.nodes[end_node]['pos'],
+          'start_comp': self.graph.nodes[start_node]['comps'],
+          'end_comp': self.graph.nodes[end_node]['comps'],
+          'internal_path': path,
+          'allow_reverse': True if gene_type == 'compressed' else False
+      }
+      self.next_gene_id += 1
+
+  def _get_initial_chromosome(self):
+      """Returns the list of all gene IDs to seed PyGAD's initial population."""
+      return list(self.registry.keys())
+
+  # def get_unassigned_genes(self, chromosome):
+  #     """
+  #     Returns a list of gene IDs in the chromosome that need composition assignment.
+  #     Useful for the fitness function before calling the Wolfram package.
+  #     """
+  #     return [gene_id for gene_id in chromosome if self.registry[gene_id]['type'] == 'new_point']
+
+  # def calculate_distance(self, chromosome):
+  #     """
+  #     Calculates the total Euclidean distance of the chromosome sequence.
+  #     O(N) time complexity using dictionary lookups.
+  #     """
+  #     total_distance = 0.0
+      
+  #     for i in range(len(chromosome) - 1):
+  #         current_gene = self.registry[chromosome[i]]
+  #         next_gene = self.registry[chromosome[i+1]]
+          
+  #         # Note: If directionality flipping is enabled in the future, 
+  #         # you would check the GA's orientation flag for current_gene/next_gene here
+  #         # to decide whether to use 'start_pos' or 'end_pos'.
+          
+  #         point1 = current_gene['end_pos']
+  #         point2 = next_gene['start_pos']
+          
+  #         total_distance += dist(point1, point2)
+          
+  #     return total_distance
+
+  def _build_evaluation_paths(self, chromosome, registry):
+    """
+    Parses a chromosome into the desired and shifted composition paths 
+    using a spatial FIFO queue for buffer nodes.
+    """
+    cumulative_length = 0.0
+    slots = []
+
+    # 1. Forward Pass: Calculate cumulative lengths and flatten into 'slots'
+    for i in range(len(chromosome)):
+        gene_id = chromosome[i]
+        gene = registry[gene_id]
+
+        gene_internal_len = dist(gene['start_pos'], gene['end_pos'])
+
+        if i > 0:
+            prev_gene = registry[chromosome[i-1]]
+            gap_len = dist(prev_gene['end_pos'], gene['start_pos'])
+            cumulative_length += gap_len
+
+        start_len = cumulative_length
+        end_len = cumulative_length + gene_internal_len
+
+        if gene['type'] == 'new':
+            # A blank buffer slot
+            slots.append({'len': start_len, 'comp': None, 'is_fixed': False})
+        else:
+            # A fixed target. All original nodes have a start composition.
+            slots.append({'len': start_len, 'comp': gene['start_comp'], 'is_fixed': True})
+            
+            # Compressed blocks have an end composition at a different length.
+            # We treat the end of a compressed block as another fixed target in the queue.
+            if gene['type'] == 'compressed' and start_len != end_len:
+                slots.append({'len': end_len, 'comp': gene['end_comp'], 'is_fixed': True})
+
+        cumulative_length += gene_internal_len
+
+    # 2. Build the Desired Path (The Physical Target Truth)
+    desired_path = []
+    for slot in slots:
+        if slot['is_fixed'] and slot['comp'] is not None:
+            desired_path.append([slot['len'], *slot['comp']])
+
+    # 3. Build the Shifted Path (FIFO Queuing)
+    shifted_path = []
+    blocks = []
+    current_buffer = []
+    current_fixed = []
+    state = 'buffer'
+
+    # Group the slots into continuous blocks of [Buffers...] -> [Fixed Targets...]
+    for slot in slots:
+        if not slot['is_fixed']:
+            if state == 'fixed':
+                # We finished a block, save it and start a new one
+                blocks.append({'buffer': current_buffer, 'fixed': current_fixed})
+                current_buffer = []
+                current_fixed = []
+                state = 'buffer'
+            current_buffer.append(slot)
+        else:
+            state = 'fixed'
+            current_fixed.append(slot)
+
+    # Append the final block
+    if current_buffer or current_fixed:
+        blocks.append({'buffer': current_buffer, 'fixed': current_fixed})
+
+    # 4. Process the shifts for each block
+    for block in blocks:
+        buffers = block['buffer']
+        fixeds = block['fixed']
+
+        # Determine how many commands we can actually shift
+        num_to_shift = min(len(buffers), len(fixeds))
+
+        # A. Shift the first N commands into the available buffers
+        for i in range(num_to_shift):
+            shifted_path.append([buffers[i]['len'], *fixeds[i]['comp']])
+
+        # Note: Any remaining buffer nodes (len(buffers) > len(fixeds)) 
+        # receive nothing. They just inherit the Wolfram step function's previous state.
+
+        # B. If we ran out of buffers, the remaining commands stay at their original coordinates
+        for i in range(num_to_shift, len(fixeds)):
+            shifted_path.append([fixeds[i]['len'], *fixeds[i]['comp']])
+
+    return shifted_path, desired_path, cumulative_length
+  
+  def _fast_edge_recombination_crossover(self, parents, offspring_size, ga_instance):
+    offspring = []
+    num_genes = offspring_size[1]
+
+    while len(offspring) < offspring_size[0]:
+        p1, p2 = random.sample(list(parents), 2)
+
+        # Build adjacency lists
+        edge_map = {gene: set() for gene in p1}
+        for p in (p1, p2):
+            for i in range(num_genes):
+                if i > 0:
+                    edge_map[p[i]].add(p[i - 1])
+                if i < num_genes - 1:
+                    edge_map[p[i]].add(p[i + 1])
+
+        unused = set(p1)
+
+        current = random.choice(p1)
+        child = [current]
+        unused.remove(current)
+
+        while unused:
+            neighbors = edge_map[current] & unused
+
+            if neighbors:
+                # Choose neighbor with smallest adjacency list
+                next_node = min(neighbors, key=lambda x: len(edge_map[x]))
+            else:
+                next_node = min(unused, key=lambda x: dist(self.registry[current]['end_pos'],self.registry[x]['start_pos']))
+
+            child.append(next_node)
+            unused.remove(next_node)
+
+            # Remove chosen node from its neighbors only
+            for n in edge_map[next_node]:
+                edge_map[n].discard(next_node)
+
+            current = next_node
+
+        offspring.append(child)
+
+    return np.array(offspring)
+  
+  def _path_fitness(self, ga_instance: pygad.GA, solution, solution_idx) -> float:
+    shifted_path, desired_path, cumulative_len = self._build_evaluation_paths(solution, self.registry)
+    errorByComp = list(self.session.evaluate(wl.CompositionErrorEstimation.EvaluatePathErrorWithEmpty(shifted_path,desired_path)))
+    return self._total_fitness(cumulative_len, errorByComp, len(solution))
+  
+  def _total_fitness(self, cum_len, ind_errors, num_nodes):
+    total_comp_error = 0
+    for i, error in enumerate(ind_errors):
+       total_comp_error += error * self.composition_weights[i]
+    combined_cost = (self.fitness_len_factor * (cum_len / (num_nodes * self.expected_len))) + (self.fitness_comp_factor * total_comp_error)
+    return (1 / combined_cost)
+  
+  def _batch_fitness(self, ga_instance: pygad.GA, solutions, solution_indices):
+    batch_shifted = []
+    batch_desired = []
+    batch_lengths = []
+    
+    # 1. Parse all chromosomes in the generation
+    for solution in solutions:
+        shifted, desired, total_len = self._build_evaluation_paths(solution, self.registry)
+        batch_shifted.append(shifted)
+        batch_desired.append(desired)
+        batch_lengths.append(total_len)
+        
+    # 2. Call the Wolfram Model ONCE for the entire batch
+    # Assumes 'wl' is your active Wolfram Language session
+    # and the WL function is modified to return a list of scalar error sums.
+    try:
+        population_errors = self.session.evaluate(
+            wl.CompositionErrorEstimation.BatchEvalPathWEmpty(batch_shifted, batch_desired)
+        )
+    except Exception as e:
+        # Handle WL errors by penalizing the batch
+        print(f"Wolfram Evaluation Failed: {e}")
+        return [-9999] * len(solutions)
+
+    # 3. Calculate final combined fitness for each solution
+    fitness_scores = []
+    num_genes = len(solutions[0])
+    
+    for i in range(len(solutions)):
+        fitness_scores.append(self._total_fitness(batch_lengths[i],population_errors[i],num_genes))
+        
+    return fitness_scores
+  
+  def reset_ga(self, n_gens: int=5, n_par_mate: int=120,
+        parent_keep: int=0, n_elites: int=2, #if n_elites != 0, then parent_keep is ignored in GA
+        mut:str='inversion', mut_prob:float=0.4,
+        cross_prob:float=0.2, #doesn't really matter with custom crossovers
+        cross_type:str='edge_recomb',
+        parent_choice:str='tournament', tour_k:int = 3,
+        sol_per_pop:int=30):
+
+    #convert string parameter to class type
+    if cross_type == 'edge_recomb':
+      crossover = self._fast_edge_recombination_crossover
+    else:
+      crossover = 'single_point'
+
+    self.ga = pygad.GA(num_generations=n_gens,
+                      num_parents_mating=n_par_mate,
+                      crossover_probability=cross_prob,
+                      parent_selection_type=parent_choice,
+                      K_tournament=tour_k,
+                      mutation_type=mut,
+                      mutation_probability=mut_prob,
+                      keep_parents=parent_keep,
+                      keep_elitism=n_elites,
+                      #class values
+                      crossover_type=crossover, #type: ignore #locked from the class
+                      fitness_func=self._batch_fitness, #locked from the class
+                      fitness_batch_size=sol_per_pop, #locked from the class
+                      gene_space=list(self.gene_range), #locked from the class
+                      initial_population=[sorted(self._get_initial_chromosome())]*sol_per_pop,  #locked from the class
+                      sol_per_pop=sol_per_pop,
+                      num_genes=len(self.gene_range),
+                      #non-default values
+                      allow_duplicate_genes=False, #non-default, set and forget
+                      gene_type=int,   #default, set and forget
+                      #default values
+                      on_generation=self.on_generation,
+                      on_start=self.on_start,
+                      on_crossover=self.on_crossover,
+                      on_fitness=self.on_fitness,
+                      on_parents=self.on_parents,
+                      on_mutation=self.on_mutation,
+                      on_stop=self.on_stop
+                      )
+  
+  def give_solution(self):
+    solution, solution_fitness, solution_idx = self.ga.best_solution()
+    self.log.debug(f"Parameters of the best solution : {solution}")
+    self.log.info(f"Fitness value of the best solution = {solution_fitness}")
+    self.log.info(f"Index of the best solution : {solution_idx}")
+    # self.log.info(f"Length of the solution = {}")
+    return self.ga.best_solution()
+  #endregion GA.Main
+
+  #region GA.On-Functions
+  def on_start(self, ga_instance):
+      self.log.info("Starting GA search")
+
+  def on_fitness(self, ga_instance, population_fitness):
+      self.log.info("Computed fitness")
+
+  def on_parents(self, ga_instance, selected_parents):
+      self.log.info("Selected parents")
+
+  def on_crossover(self, ga_instance, offspring_crossover):
+      self.log.info("Performed crossovers")
+
+  def on_mutation(self, ga_instance, offspring_mutation):
+      self.log.info("Mutated")
+
+  def on_stop(self, ga_instance, last_population_fitness):
+      self.log.info("Ending GA search")
+      
+  def on_generation(self, ga_instance:pygad.GA):
+      self.log.info(ga_instance.generations_completed)
+      self.log.info(ga_instance.best_solution()[1]) #fitness
+      self.log.debug(ga_instance.population)
+  #endregion GA.On-Functions
+
+
+class LightGTM:
+  def __init__(self, nx_graph, hamiltonian_path, new_points, expected_len:float=0.8, comp_weights:list=[1,1,1], fit_len:float=1, fit_comp:float=1, graph_num:int=0, logger=None):
+    self.log:logging.Logger = logger if logger is not None else LogFileMaker.create_logger("_".join([datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),"graph",str(graph_num),"ga.txt"]))
+    self.graph = nx_graph
+    self.original_path = hamiltonian_path
+    self.new_points = new_points
+    self.expected_len = expected_len
+    self.composition_weights = comp_weights
+    self.fitness_len_factor = fit_len
+    self.fitness_comp_factor = fit_comp
+    
+    self.registry = {}
+    self.next_gene_id = 1
+
+    self._build_registry()
+    
+    self.gene_range = sorted(self._get_initial_chromosome())
+
+    self.constraints = self._build_constraint_rules()
+
+    self.session = wls(kernel="C:\\Program Files\\Wolfram Research\\Wolfram\\14.3\\WolframKernel.exe")
+    self.session.evaluate(wlexpr('Get["./compModels/CompositionErrorEstimation.wl"]'))
+    self.session.evaluate(wl.CompositionErrorEstimation.InitializeModel("./compModels",28.0156,0.2,0.8))
+
+  def close_log(self):
+    for handler in self.log.handlers:
+      self.log.removeHandler(handler)
+
+  def close_wls(self, graceful:bool=True):
+    if not graceful:
+      self.session.terminate()
+    self.session.stop_future(gracefully=graceful)
+
+  def run_ga(self):
+    self.ga.run()
+
+  def _build_constraint_rules(self):
+    rules:list = [None]
+    for i in range(len(self.gene_range)-1):
+      rules.append(lambda sol,values: [val for val in values if dist(self.registry[val]['start_pos'], self.registry[sol[i]]['end_pos'])<5])
+    return rules
+
+  def _build_registry(self):
+        """Processes the graph, path, and new points to build the 1D dictionary registry."""
+        current_chunk = []
+        
+        for node in self.original_path:
+            is_natural_external = not self.graph.nodes[node]['internal']
+            current_chunk.append(node)
+            
+            # We only finalize a chunk if we hit a natural external
+            # AND it isn't the very first node of a fresh chunk.
+            if is_natural_external and len(current_chunk) > 1:
+                
+                if len(current_chunk) == 2:
+                    # Pattern: [BoundaryNode, NaturalExternal]
+                    # Example: [E1, E2] OR the [I2, E3] case you described.
+                    # The BoundaryNode stands alone as its own distinct gene.
+                    prev_node = current_chunk[0]
+                    self._add_to_registry('standalone', [prev_node])
+                    
+                    # The current natural external starts the next chunk
+                    current_chunk = [node] 
+                    
+                else:
+                    # Pattern: [BoundaryNode, Internal(s)..., NaturalExternal]
+                    # Example: [E1, I1, E2] OR [I2, I3, E3]
+                    # This is a standard compressed sequence.
+                    self._add_to_registry('compressed', current_chunk)
+                    
+                    # CRITICAL STEP: By completely clearing the chunk, the NEXT node in the path 
+                    # (even if it's internal like I2) will be forced to act as the BoundaryNode 
+                    # for the next sequence. This ensures E2 is consumed only once.
+                    current_chunk = [] 
+
+        # Catch any trailing nodes at the end of the Hamiltonian path
+        # If the path ended exactly on a compressed block, current_chunk is []
+        if len(current_chunk) > 0:
+            if len(current_chunk) == 1:
+                # Ends on a single standalone node
+                self._add_to_registry('standalone', current_chunk)
+            else:
+                # Edge case: If the path ends with [BoundaryNode, Internal(s)...]
+                self._add_to_registry('compressed', current_chunk)
+
+        # 2. Add New External Points to the Registry
+        for point in self.new_points:
+            self.registry[self.next_gene_id] = {
+                'type': 'new',
+                'start_pos': point,
+                'end_pos': point,
+                'start_comp': None, 
+                'end_comp': None,
+                'internal_path': [],
+                'allow_reverse': False
+            }
+            self.next_gene_id += 1
+
+  def _add_to_registry(self, gene_type, path):
+      """Helper to extract node attributes and insert them into the registry."""
+      start_node = path[0]
+      end_node = path[-1]
+      
+      self.registry[self.next_gene_id] = {
+          'type': gene_type,
+          'start_pos': self.graph.nodes[start_node]['pos'],
+          'end_pos': self.graph.nodes[end_node]['pos'],
+          'start_comp': self.graph.nodes[start_node]['comps'],
+          'end_comp': self.graph.nodes[end_node]['comps'],
+          'internal_path': path,
+          'allow_reverse': True if gene_type == 'compressed' else False
+      }
+      self.next_gene_id += 1
+
+  def _get_initial_chromosome(self):
+      """Returns the list of all gene IDs to seed PyGAD's initial population."""
+      return list(self.registry.keys())
+
+  # def get_unassigned_genes(self, chromosome):
+  #     """
+  #     Returns a list of gene IDs in the chromosome that need composition assignment.
+  #     Useful for the fitness function before calling the Wolfram package.
+  #     """
+  #     return [gene_id for gene_id in chromosome if self.registry[gene_id]['type'] == 'new_point']
+
+  # def calculate_distance(self, chromosome):
+  #     """
+  #     Calculates the total Euclidean distance of the chromosome sequence.
+  #     O(N) time complexity using dictionary lookups.
+  #     """
+  #     total_distance = 0.0
+      
+  #     for i in range(len(chromosome) - 1):
+  #         current_gene = self.registry[chromosome[i]]
+  #         next_gene = self.registry[chromosome[i+1]]
+          
+  #         # Note: If directionality flipping is enabled in the future, 
+  #         # you would check the GA's orientation flag for current_gene/next_gene here
+  #         # to decide whether to use 'start_pos' or 'end_pos'.
+          
+  #         point1 = current_gene['end_pos']
+  #         point2 = next_gene['start_pos']
+          
+  #         total_distance += dist(point1, point2)
+          
+  #     return total_distance
+
+  def _build_evaluation_paths(self, chromosome, registry):
+    """
+    Parses a chromosome into the desired and shifted composition paths 
+    using a spatial FIFO queue for buffer nodes.
+    """
+    cumulative_length = 0.0
+    slots = []
+
+    # 1. Forward Pass: Calculate cumulative lengths and flatten into 'slots'
+    for i in range(len(chromosome)):
+        gene_id = chromosome[i]
+        gene = registry[gene_id]
+
+        gene_internal_len = dist(gene['start_pos'], gene['end_pos'])
+
+        if i > 0:
+            prev_gene = registry[chromosome[i-1]]
+            gap_len = dist(prev_gene['end_pos'], gene['start_pos'])
+            cumulative_length += gap_len
+
+        start_len = cumulative_length
+        end_len = cumulative_length + gene_internal_len
+
+        # if gene['type'] == 'new':
+        #     # A blank buffer slot
+        #     slots.append({'len': start_len, 'comp': None, 'is_fixed': False})
+        # else:
+        #     # A fixed target. All original nodes have a start composition.
+        #     slots.append({'len': start_len, 'comp': gene['start_comp'], 'is_fixed': True})
+            
+        #     # Compressed blocks have an end composition at a different length.
+        #     # We treat the end of a compressed block as another fixed target in the queue.
+        #     if gene['type'] == 'compressed' and start_len != end_len:
+        #         slots.append({'len': end_len, 'comp': gene['end_comp'], 'is_fixed': True})
+
+        cumulative_length += gene_internal_len
+
+    # 2. Build the Desired Path (The Physical Target Truth)
+    # desired_path = []
+    # for slot in slots:
+    #     if slot['is_fixed'] and slot['comp'] is not None:
+    #         desired_path.append([slot['len'], *slot['comp']])
+
+    # 3. Build the Shifted Path (FIFO Queuing)
+    # shifted_path = []
+    # blocks = []
+    # current_buffer = []
+    # current_fixed = []
+    # state = 'buffer'
+
+    # Group the slots into continuous blocks of [Buffers...] -> [Fixed Targets...]
+    # for slot in slots:
+    #     if not slot['is_fixed']:
+    #         if state == 'fixed':
+    #             # We finished a block, save it and start a new one
+    #             blocks.append({'buffer': current_buffer, 'fixed': current_fixed})
+    #             current_buffer = []
+    #             current_fixed = []
+    #             state = 'buffer'
+    #         current_buffer.append(slot)
+    #     else:
+    #         state = 'fixed'
+    #         current_fixed.append(slot)
+
+    # Append the final block
+    # if current_buffer or current_fixed:
+    #     blocks.append({'buffer': current_buffer, 'fixed': current_fixed})
+
+    # 4. Process the shifts for each block
+    # for block in blocks:
+    #     buffers = block['buffer']
+    #     fixeds = block['fixed']
+
+    #     # Determine how many commands we can actually shift
+    #     num_to_shift = min(len(buffers), len(fixeds))
+
+    #     # A. Shift the first N commands into the available buffers
+    #     for i in range(num_to_shift):
+    #         shifted_path.append([buffers[i]['len'], *fixeds[i]['comp']])
+
+    #     # Note: Any remaining buffer nodes (len(buffers) > len(fixeds)) 
+    #     # receive nothing. They just inherit the Wolfram step function's previous state.
+
+    #     # B. If we ran out of buffers, the remaining commands stay at their original coordinates
+    #     for i in range(num_to_shift, len(fixeds)):
+    #         shifted_path.append([fixeds[i]['len'], *fixeds[i]['comp']])
+
+    return cumulative_length #shifted_path, desired_path, cumulative_length
+  
+  def _fast_edge_recombination_crossover(self, parents, offspring_size, ga_instance):
+    offspring = []
+    num_genes = offspring_size[1]
+
+    while len(offspring) < offspring_size[0]:
+        p1, p2 = random.sample(list(parents), 2)
+
+        # Build adjacency lists
+        edge_map = {gene: set() for gene in p1}
+        for p in (p1, p2):
+            for i in range(num_genes):
+                if i > 0:
+                    edge_map[p[i]].add(p[i - 1])
+                if i < num_genes - 1:
+                    edge_map[p[i]].add(p[i + 1])
+
+        unused = set(p1)
+
+        current = random.choice(p1)
+        child = [current]
+        unused.remove(current)
+
+        while unused:
+            neighbors = edge_map[current] & unused
+
+            if neighbors:
+                # Choose neighbor with smallest adjacency list
+                next_node = min(neighbors, key=lambda x: len(edge_map[x]))
+            else:
+                next_node = min(unused, key=lambda x: dist(self.registry[current]['end_pos'],self.registry[x]['start_pos']))
+
+            child.append(next_node)
+            unused.remove(next_node)
+
+            # Remove chosen node from its neighbors only
+            for n in edge_map[next_node]:
+                edge_map[n].discard(next_node)
+
+            current = next_node
+
+        offspring.append(child)
+
+    return np.array(offspring)
+  
+  def _path_fitness(self, ga_instance: pygad.GA, solution, solution_idx) -> float:
+    cumulative_len = self._build_evaluation_paths(solution, self.registry)
+    # errorByComp = list(self.session.evaluate(wl.CompositionErrorEstimation.EvaluatePathErrorWithEmpty(shifted_path,desired_path)))
+    return self._total_fitness(cumulative_len, len(solution))
+  
+  def _total_fitness(self, cum_len, num_nodes):
+    total_comp_error = 0
+    # for i, error in enumerate(ind_errors):
+      #  total_comp_error += error * self.composition_weights[i]
+    combined_cost = (self.fitness_len_factor * (cum_len**2 / (num_nodes * self.expected_len))) + (self.fitness_comp_factor * total_comp_error)
+    return (1 / combined_cost)
+  
+  def _batch_fitness(self, ga_instance: pygad.GA, solutions, solution_indices):
+    # batch_shifted = []
+    # batch_desired = []
+    batch_lengths = []
+    
+    # 1. Parse all chromosomes in the generation
+    for solution in solutions:
+        total_len = self._build_evaluation_paths(solution, self.registry)
+        # batch_shifted.append(shifted)
+        # batch_desired.append(desired)
+        batch_lengths.append(total_len)
+        
+    # 2. Call the Wolfram Model ONCE for the entire batch
+    # Assumes 'wl' is your active Wolfram Language session
+    # and the WL function is modified to return a list of scalar error sums.
+    # try:
+    #     population_errors = self.session.evaluate(
+    #         wl.CompositionErrorEstimation.BatchEvalPathWEmpty(batch_shifted, batch_desired)
+    #     )
+    # except Exception as e:
+    #     # Handle WL errors by penalizing the batch
+    #     print(f"Wolfram Evaluation Failed: {e}")
+    #     return [-9999] * len(solutions)
+
+    # 3. Calculate final combined fitness for each solution
+    fitness_scores = []
+    num_genes = len(solutions[0])
+    
+    for i in range(len(solutions)):
+        fitness_scores.append(self._total_fitness(batch_lengths[i],num_genes))
+        
+    return fitness_scores
+  
+  def reset_ga(self, n_gens: int=5, n_par_mate: int=20,
+        parent_keep: int=0, n_elites: int=5, #if n_elites != 0, then parent_keep is ignored in GA
+        mut:str='inversion', mut_prob:float=0.4,
+        cross_prob:float=0.2, #doesn't really matter with custom crossovers
+        cross_type:str='edge_recomb',
+        parent_choice:str='tournament', tour_k:int = 3,
+        sol_per_pop:int=30):
+
+    #convert string parameter to class type
+    if cross_type == 'edge_recomb':
+      crossover = self._fast_edge_recombination_crossover
+    else:
+      crossover = 'single_point'
+
+    self.ga = pygad.GA(num_generations=n_gens,
+                      num_parents_mating=n_par_mate,
+                      crossover_probability=cross_prob,
+                      parent_selection_type=parent_choice,
+                      K_tournament=tour_k,
+                      mutation_type=mut,
+                      mutation_probability=mut_prob,
+                      keep_parents=parent_keep,
+                      keep_elitism=n_elites,
+                      #class values
+                      crossover_type=crossover, #type: ignore #locked from the class
+                      fitness_func=self._batch_fitness, #locked from the class
+                      fitness_batch_size=sol_per_pop, #locked from the class
+                      gene_space=list(self.gene_range), #locked from the class
+                      initial_population=[self.gene_range]*sol_per_pop,  #locked from the class
+                      sol_per_pop=sol_per_pop,
+                      num_genes=len(self.gene_range),
+                      #non-default values
+                      allow_duplicate_genes=False, #non-default, set and forget
+                      gene_type=int,   #default, set and forget
+                      #default values
+                      on_generation=self.on_generation,
+                      on_start=self.on_start,
+                      on_crossover=self.on_crossover,
+                      on_fitness=self.on_fitness,
+                      on_parents=self.on_parents,
+                      on_mutation=self.on_mutation,
+                      on_stop=self.on_stop
+                      )
+
+  def give_solution(self):
+    solution, solution_fitness, solution_idx = self.ga.best_solution()
+    self.log.debug(f"Parameters of the best solution : {solution}")
+    self.log.info(f"Fitness value of the best solution = {solution_fitness}")
+    self.log.info(f"Index of the best solution : {solution_idx}")
+    # self.log.info(f"Length of the solution = {}")
+    return self.ga.best_solution()
+  #endregion GA.Main
+
+  #region GA.On-Functions
+  def on_start(self, ga_instance):
+      self.log.info("Starting GA search")
+
+  def on_fitness(self, ga_instance, population_fitness):
+      self.log.info("Computed fitness")
+
+  def on_parents(self, ga_instance, selected_parents):
+      self.log.info("Selected parents")
+
+  def on_crossover(self, ga_instance, offspring_crossover):
+      self.log.info("Performed crossovers")
+
+  def on_mutation(self, ga_instance, offspring_mutation):
+      self.log.info("Mutated")
+
+  def on_stop(self, ga_instance, last_population_fitness):
+      self.log.info("Ending GA search")
+      
+  def on_generation(self, ga_instance:pygad.GA):
+      self.log.info(ga_instance.generations_completed)
+      self.log.info(ga_instance.best_solution()[1]) #fitness
+      self.log.debug(ga_instance.population)
+  #endregion GA.On-Functions
