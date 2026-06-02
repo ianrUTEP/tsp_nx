@@ -7,6 +7,8 @@ seaborn #color palettes
 matplotlib #interactive plotting tool, used for colors
 dill  #session/data dump and load
 pygad #genetic algorithm framework
+wolframclient #talk to wolfram language expression
+pyzmq #have wolfram talk to python
 
 #temporary
 ipywidgets #for using notebook and testing
