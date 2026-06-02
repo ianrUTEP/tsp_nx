@@ -208,8 +208,37 @@ def get_attribute_extremes(graph: nx.Graph, attribute: str):
       minAtt = attrList[edge]
   return (minAtt, maxAtt)
 
-def comps_over_sol_len(graph: nx.Graph, solution) -> list:
-  return []
+def comps_over_sol_len(graph: nx.Graph, solution):
+  total = 0
+    
+  for u, v in zip(solution[:-1], solution[1:]):
+        c1 = graph.nodes[u]['comps']
+        c2 = graph.nodes[v]['comps']
+        total += composition_factor(c1, c2)
+  return total
+  if len(solution) > 1:
+    return total / (len(solution) - 1)
+  else:
+    return 0
+
+def format_comp_len(graph: nx.Graph, path: list):
+  '''Requires a non-compressed graph and solution'''
+  cum_len = 0
+  new_entry = [cum_len]
+  new_entry.extend(graph.nodes[path[0]]['comps'])
+  comp_list_over_len = [new_entry]
+  for i in range(len(path) - 1):
+    cum_len += graph[path[i]][path[i+1]]['length']
+    new_entry = [cum_len]
+    new_entry.extend(graph.nodes[path[i+1]]['comps'])
+    comp_list_over_len.append(new_entry)
+  return comp_list_over_len
+
+def comps_by_node(graph_list: list[nx.Graph]):
+  compositions_per_graph = []
+  for graph in graph_list:
+     compositions_per_graph.append(list(map(list,graph.nodes.data('comps'))))
+  return compositions_per_graph
 
 #region Out.LogFileMaker
 class LogFileMaker:
