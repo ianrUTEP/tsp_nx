@@ -51,7 +51,7 @@ def complete_graph_from_row(row: tuple, num: int) -> nx.Graph:
               groupidx=node_data['streamline'][1],
               pstress=node_data['pStressV'],
               comps=node_data['CompV'],
-              internal=bool(node_data['partMember'])) # may have to change partmember behavior to "node identifier" in future and not bool
+              internal=bool(node_data.get('partMember',1))) # may have to change partmember behavior to "node identifier" in future and not bool
   for edge_str, edge_data, in getattr(row, 'edges').items():
     u_str, v_str = edge_str.split(',')
     G.add_edge(int(u_str), int(v_str), length=edge_data['len'], alignment=edge_data['align']) #no weight given yet
@@ -66,7 +66,7 @@ def compressed_complete_from_row(row: tuple, num: int) -> nx.Graph:
               groupidx=node_data['streamline'][1],
               pstress=node_data['pStressV'],
               comps=node_data['CompV'],
-              internal=bool(node_data['partMember'])) # may have to change partmember behavior to "node identifier" in future and not bool
+              internal=bool(node_data.get('partMember', 1))) # may have to change partmember behavior to "node identifier" in future and not bool
   for edge_str, edge_data, in getattr(row, 'compedges').items():
     u_str, v_str = edge_str.split(',')
     G.add_edge(int(u_str), int(v_str), lengths=edge_data['l'], alignments=edge_data['a'], nodes=edge_data['n'])
