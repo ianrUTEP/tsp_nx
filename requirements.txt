@@ -9,6 +9,8 @@ dill  #session/data dump and load
 pygad #genetic algorithm framework
 wolframclient #talk to wolfram language expression
 pyzmq #have wolfram talk to python
+ortools #Google's Optimal Routing library
+python-tsp #another solver library
 
 #temporary
 ipywidgets #for using notebook and testing
