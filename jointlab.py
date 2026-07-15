@@ -49,7 +49,7 @@ def complete_graph_from_row(row: tuple, num: int) -> nx.Graph:
               pos=(node_data['pos'][0], node_data['pos'][1]), 
               group=node_data['streamline'][0],     # streamline number becomes group
               groupidx=node_data['streamline'][1],
-              pstress=node_data['pStressV'],
+              # pstress=node_data['pStressV'],
               comps=node_data['CompV'],
               internal=bool(node_data.get('partMember',1))) # may have to change partmember behavior to "node identifier" in future and not bool
   for edge_str, edge_data, in getattr(row, 'edges').items():
@@ -64,7 +64,7 @@ def compressed_complete_from_row(row: tuple, num: int) -> nx.Graph:
               pos=(node_data['pos'][0], node_data['pos'][1]), 
               group=node_data['streamline'][0],     # streamline number becomes group
               groupidx=node_data['streamline'][1],
-              pstress=node_data['pStressV'],
+              # pstress=node_data['pStressV'],
               comps=node_data['CompV'],
               internal=bool(node_data.get('partMember', 1))) # may have to change partmember behavior to "node identifier" in future and not bool
   for edge_str, edge_data, in getattr(row, 'compedges').items():
