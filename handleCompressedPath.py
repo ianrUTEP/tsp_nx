@@ -24,7 +24,7 @@ console_level_str = args.console_level
 jl.LogFileMaker(file_level_str, console_level_str, log_base_directory)
 
 sol_list = jl.read_sol_list(sol_list_filepath)
-graph_list = jl.reset_graph_list(graph_list_filepath)
+graph_list = jl.reset_graph_list_wxf(graph_list_filepath)
 jl.add_weights(graph_list)
 
 uncompressed_data = jl.decompress(graph_list, sol_list) #0 = complete graphs, 1 = decompressed paths (may be incomplete)

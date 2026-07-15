@@ -16,6 +16,7 @@ import sys
 from math import dist
 from wolframclient.evaluation import WolframLanguageSession as wls
 from wolframclient.language import wl, wlexpr
+from wolframclient.deserializers import binary_deserialize
 
 #region Load Graphs
 def read_sol_list(json_filepath):
@@ -23,6 +24,127 @@ def read_sol_list(json_filepath):
     new_sol_list = json.load(json_file)
   return(new_sol_list)
   
+
+## COPILOT START
+def reset_graph_list_wxf(wxf_filepath: str):
+    new_graph_list = []
+
+    print("Attempting to load the graphs")
+    load_graphs_wxf(wxf_filepath, new_graph_list)
+    print("Loaded", len(new_graph_list), "graphs from the provided file")
+
+    return new_graph_list
+
+
+def iter_wxf_records(file_path: str):
+    """
+    Iterate over a length-prefixed WXF stream.
+
+    File format expected:
+        ASCII byte length
+        newline
+        raw WXF payload
+        ASCII byte length
+        newline
+        raw WXF payload
+        ...
+
+    Each WXF payload should deserialize to one graph-level record.
+    """
+    with open(file_path, "rb") as f:
+        while True:
+            length_line = f.readline()
+
+            # Normal EOF
+            if not length_line:
+                break
+
+            length_line = length_line.strip()
+
+            # Skip accidental blank lines, if any
+            if not length_line:
+                continue
+
+            payload_length = int(length_line)
+            payload = f.read(payload_length)
+
+            if len(payload) != payload_length:
+                raise EOFError(
+                    f"Expected {payload_length} bytes, "
+                    f"but only read {len(payload)} bytes."
+                )
+
+            yield binary_deserialize(payload)
+
+
+def load_graphs_wxf(file_path: str, graph_list: list) -> list:
+    """
+    Load graph records from a WXF stream and append NetworkX graphs
+    to graph_list.
+
+    This replaces load_graphs_json(...).
+    """
+    for i, record in enumerate(iter_wxf_records(file_path)):
+        graph_list.append(complete_graph_from_record(record, i))
+
+        if "compnodes" in record and "compedges" in record:
+            graph_list.append(compressed_complete_from_record(record, i))
+
+    return graph_list
+
+def complete_graph_from_record(record: dict, num: int) -> nx.Graph:
+    G = nx.Graph(compressed=False, number=num)
+
+    for node_id, node_data in record["nodes"]:
+        G.add_node(
+            int(node_id),
+            pos=(node_data["pos"][0], node_data["pos"][1]),
+            group=node_data["streamline"][0],
+            groupidx=node_data["streamline"][1],
+            # pstress=node_data["pStressV"],
+            comps=node_data["CompV"].tolist(),
+            internal=bool(node_data.get("partMember", 1)),
+        )
+
+    for edge_key, edge_data in record["edges"]:
+        u, v = edge_key
+
+        G.add_edge(
+            int(u),
+            int(v),
+            length=edge_data["len"],
+            alignment=edge_data["align"],
+        )
+
+    return G
+
+def compressed_complete_from_record(record: dict, num: int) -> nx.Graph:
+    G = nx.Graph(compressed=True, number=num)
+
+    for node_id, node_data in record["compnodes"]:
+        G.add_node(
+            int(node_id),
+            pos=(node_data["pos"][0], node_data["pos"][1]),
+            group=node_data["streamline"][0],
+            groupidx=node_data["streamline"][1],
+            # pstress=node_data["pStressV"],
+            comps=node_data["CompV"].tolist(),
+            internal=bool(node_data.get("partMember", 1)),
+        )
+
+    for edge_key, edge_data in record["compedges"]:
+        u, v = edge_key
+
+        G.add_edge(
+            int(u),
+            int(v),
+            lengths=edge_data["l"],
+            alignments=edge_data["a"],
+            nodes=edge_data["n"],
+        )
+
+    return G
+## COPILOT END
 
 def reset_graph_list(json_filepath):
   new_graph_list = []
@@ -401,10 +523,10 @@ def decompress(graph_list, solution_list):
       for u, v in [comp_sol[n:n+2] for n in range(0, len(comp_sol)-1)]:
         nodes:list = g[u][v]['nodes'] #get the nodes each edge represents
         if u > v:
-          full_sol += reversed(nodes[:-1]) #node representation always cannonical order, may need reversed to reflect edge direction and drop the last one
+          full_sol.extend(reversed(nodes[:-1])) #node representation always cannonical order, may need reversed to reflect edge direction and drop the last one
         else:
-          full_sol += nodes[1:] #drop the first one
-      decompressed_sols.append(full_sol)
+          full_sol.extend(nodes[1:]) #drop the first one
+      decompressed_sols.append(list(map(int,full_sol)))
   return (uncompressed_graphs, decompressed_sols)
 
 def complete_missing_nodes(graph: nx.Graph, solution: list) -> list:
