@@ -111,7 +111,7 @@ def solve_open_tsp_ortools(in_bin_file_path, n_original, solution_path, time_lim
   search_parameters = pywrapcp.DefaultRoutingSearchParameters()
   search_parameters.first_solution_strategy = routing_enums_pb2.FirstSolutionStrategy.PARALLEL_SAVINGS
   search_parameters.local_search_metaheuristic = routing_enums_pb2.LocalSearchMetaheuristic.GUIDED_LOCAL_SEARCH #SIMULATED_ANNEALING = allow some bad, TABU_SEARCH = forbid recent swaps
-  search_parameters.local_search_operators.use_lin_kernighan = True
+  search_parameters.local_search_operators.use_lin_kernighan = pywrapcp.BOOL_TRUE
   # search_parameters.local_search_operators.use_two_opt = True
   # search_parameters.local_search_operators.use_or_opt = True #3opt variant
   # search_parameters.local_search_operators.use_relocate = True
