@@ -84,36 +84,39 @@ def solve_open_tsp_ortools(in_bin_file_path, n_original, solution_path, preferre
   secondary_penalty = np.int64(break_penalty*0.5)
   log_name = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
   log = LogFileMaker.create_logger("_".join([log_name,"internal_solver.log"]))
-  dist_matrix_float = np.fromfile(in_bin_file_path,dtype=np.int64)
-  dist_matrix_float = dist_matrix_float.reshape((n_original, n_original))
+  dist_matrix_int = np.fromfile(in_bin_file_path,dtype=np.int64)
+  dist_matrix_int = dist_matrix_int.reshape((n_original, n_original))
 
   native_log_path = os.path.join(LogFileMaker.global_base_path, "_".join([log_name,"or_search.log"]))
   
-  dist_matrix_float = np.pad(dist_matrix_float, ((0,1),(0,1)), mode='constant', constant_values=0)
+  dist_matrix_int = np.pad(dist_matrix_int, ((0,1),(0,1)), mode='constant', constant_values=0)
   for i in range(n_original):
     cost = 0 if i in preferred_breaks else secondary_penalty if i in secondary_breaks else break_penalty
-    dist_matrix_float[i, n_original] = cost
-    dist_matrix_float[n_original, i] = cost
+    dist_matrix_int[i, n_original] = cost
+    dist_matrix_int[n_original, i] = cost
   
   n_total = n_original + 1
 
   # dist_matrix_int = np.round(dist_matrix_float * scale_factor).astype(np.int64)
 
-  zero_count = np.count_nonzero(dist_matrix_float==0) - n_total- (n_total * 2)
+  zero_count = np.count_nonzero(dist_matrix_int==0) - n_total- (n_total * 2)
   log.info(f"number of explicit 0-weight edges seen by OR-Tools:{zero_count}")
 
   #                                       length, vehicles, start/stop at free
   manager = pywrapcp.RoutingIndexManager(n_total, 1, n_original)
   routing = pywrapcp.RoutingModel(manager)
 
-  def distance_callback(from_index, to_index):
-    from_node = manager.IndexToNode(from_index)
-    to_node = manager.IndexToNode(to_index)
-    return int(dist_matrix_float[from_node][to_node])
+  # def distance_callback(from_index, to_index):
+  #   from_node = manager.IndexToNode(from_index)
+  #   to_node = manager.IndexToNode(to_index)
+  #   return dist_matrix_int[from_node][to_node]
   
   routing.RegisterCumulDependentTransitCallback
-  transit_callback_index = routing.RegisterTransitCallback(distance_callback)  
-  routing.SetArcCostEvaluatorOfAllVehicles(transit_callback_index)
+  dist_matrix_list_int = dist_matrix_int.astype(int).tolist()
+  transit_matrix = routing.RegisterTransitMatrix(dist_matrix_list_int)
+  routing.SetArcCostEvaluatorOfAllVehicles(transit_matrix)
+  # transit_callback_index = routing.RegisterTransitCallback(distance_callback)  
+  # routing.SetArcCostEvaluatorOfAllVehicles(transit_callback_index)
 
   search_parameters = pywrapcp.DefaultRoutingSearchParameters()
   search_parameters.first_solution_strategy = routing_enums_pb2.FirstSolutionStrategy.PARALLEL_SAVINGS
