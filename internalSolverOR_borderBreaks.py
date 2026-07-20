@@ -1,8 +1,7 @@
 import numpy as np
 from datetime import datetime
 from jointlab import LogFileMaker
-from ortools.constraint_solver import routing_enums_pb2
-from ortools.constraint_solver import pywrapcp
+from ortools.constraint_solver import pywrapcp, routing_enums_pb2
 import os
 import sys
 from contextlib import contextmanager
