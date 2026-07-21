@@ -579,9 +579,10 @@ def missing_nodes_zag(graph: nx.Graph, solution: list) -> list:
         # check the nodes immediately before and after the possible connection in the solution
         idx = solution.index(edge[1])
         neighbors = [solution[idx-1] if idx-1>= 0 else None, solution[idx+1] if idx+1 < len(solution) else None]
+        neighbors = [x for x in neighbors if x is not None]
         neighbors.sort(key=lambda x: graph[n][x]['weight'])
         # sort the neighbors, again greedily
-        log.debug("Attempting to connect %d to %d using neighbors %d and %d", n, edge[1], neighbors[0], neighbors[1])
+        log.debug("Attempting to connect %d to %d using neighbors %d and %d", n, edge[1], neighbors[0], neighbors[1] if len(neighbors) > 1 else -1)
         # check each neighbor
         for neighbor in neighbors:
           # start/end of solution exception
