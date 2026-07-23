@@ -78,10 +78,9 @@ def redirect_native_output_to_file(path, mode="a"):
 #         if line.strip():
 #           logger.log(level, line)
 
-def solve_open_tsp_ortools(in_bin_file_path, n_original, solution_path, preferred_breaks, secondary_breaks, break_penalty_int, time_limit_seconds=5*60):
+def solve_open_tsp_ortools(in_bin_file_path, n_original, solution_path, log_name, preferred_breaks, secondary_breaks, break_penalty_int, time_limit_seconds=5*60):
   break_penalty = np.int64(break_penalty_int)
   secondary_penalty = np.int64(break_penalty*0.5)
-  log_name = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
   log = LogFileMaker.create_logger("_".join([log_name,"internal_solver.log"]))
   dist_matrix_int = np.fromfile(in_bin_file_path,dtype=np.int64)
   dist_matrix_int = dist_matrix_int.reshape((n_original, n_original))
